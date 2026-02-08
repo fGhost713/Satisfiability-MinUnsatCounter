@@ -64,10 +64,15 @@ minunsat minunsat -v 5 -l 3 -c 12 --checkpoint
 - `-v, --variables` (required): Number of variables (2-10)
 - `-l, --literals` (optional): Literals per clause, default=2 (2-SAT), use 3 for 3-SAT
 - `-c, --clauses` (required): Number of clauses
-- `--cpu`: Force CPU mode
+- `--cpu`: Force CPU mode 
 - `--checkpoint`: Enable checkpoint save/resume for long-running calculations
 
-**Limitations:** Variables limited to 2-10 (GPU memory constraints).
+**Performance notes:** 
+- v ≤ 6: Uses optimized GPU/CPU kernels (fastest, ~14 billion/s on GPU)
+- v > 6: Uses fallback implementation (up to v = 10)
+- For 2-SAT with any v, use **formula mode** for instant computation
+
+> ⚠️ **Performance Warning:** For v > 6, performance drops significantly (~100x slower) because the fallback code is not yet highly optimized. The optimized kernels use 64-bit bitmasks which can only handle 2⁶ = 64 assignments. For v > 6, we use multi-word arrays which have more memory overhead. **For 2-SAT, always prefer the formula mode** which computes results instantly for any number of variables.
 
 ### Closed-Form Formula Mode (2-SAT only)
 
@@ -242,3 +247,7 @@ MIT License
 
 1. Kleine Büning, H., & Kullmann, O. (2009). *Minimal Unsatisfiability and Autarkies*. Handbook of Satisfiability.
 2. OEIS A082138: Number of labeled 2-regular simple digraphs on n nodes.
+
+
+
+

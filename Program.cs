@@ -70,9 +70,18 @@ void RunMinUnsat(MinUnsatOptions opts, CancellationToken ct)
     
     if (opts.UseCpu)
     {
-        // Use optimized CPU implementation (fastest)
-        var cpuCounter = new CpuMinUnsatCounterOptimized();
-        countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
+        if (opts.Variables <= 6)
+        {
+            // Use optimized CPU implementation (fastest for v<=6)
+            var cpuCounter = new CpuMinUnsatCounterOptimized();
+            countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
+        }
+        else
+        {
+            // Use CPU fallback for v > 6
+            var cpuCounter = new CpuMinUnsatCounterManyVars();
+            countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
+        }
     }
     else if (opts.Variables <= 6)
     {
@@ -82,9 +91,9 @@ void RunMinUnsat(MinUnsatOptions opts, CancellationToken ct)
     }
     else
     {
-        // Fall back to CPU for v > 6 (GPU kernel limited to 6 variables)
-        var cpuCounter = new CpuMinUnsatCounterOptimized();
-        countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
+        // Use GPU fallback for v > 6 (many-vars kernel with array-based masks)
+        using var gpuCounter = new GpuMinUnsatCounterManyVars(preferGpu: true);
+        countResult = gpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
     }
     
     Console.WriteLine();

@@ -110,7 +110,8 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
         var result = new CountingResult();
 
         if (numVariables > 6)
-            throw new ArgumentOutOfRangeException(nameof(numVariables), "Optimized kernel limited to n <= 6");
+        throw new ArgumentOutOfRangeException(nameof(numVariables), 
+            "Optimized kernel limited to 6 variables (uses 64-bit assignment mask). Use simple counter for n > 6.");
         if (numClauses < 1)
             throw new ArgumentOutOfRangeException(nameof(numClauses), "Need at least 1 clause");
         if (numClauses > MaxClausesSupported)

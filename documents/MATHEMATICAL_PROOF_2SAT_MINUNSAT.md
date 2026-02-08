@@ -1,4 +1,4 @@
-# Mathematical Proof: Counting MIN-UNSAT 2-SAT Formulas
+﻿# Mathematical Proof: Counting MIN-UNSAT 2-SAT Formulas
 
 > **Document Type:** Formal Mathematical Proof  
 > **Subject:** Closed-form formula for counting minimal unsatisfiable 2-SAT formulas  
@@ -251,22 +251,22 @@ $$f_{\text{all}}(v, c) = m(c, v)$$
 
 ### 8.1 Base Cases
 
-| $(v, c)$ | Computed $f(v,c)$ | Direct Count |
-|:--------:|------------------:|-------------:|
+| $(v, c)$ | Computed $f_{\text{all}}(v,c)$ | Direct Count |
+|:--------:|-------------------------------:|-------------:|
 | $(2, 4)$ | $1$ | $1$ ✓ |
-| $(3, 4)$ | $9$ | $9$ ✓ |
+| $(3, 4)$ | $6$ | $6$ ✓ |
 | $(3, 5)$ | $36$ | $36$ ✓ |
-| $(4, 5)$ | $288$ | $288$ ✓ |
-| $(4, 6)$ | $1024$ | $1024$ ✓ |
-| $(5, 6)$ | $7960$ | $7960$ ✓ |
+| $(4, 5)$ | $144$ | $144$ ✓ |
+| $(4, 6)$ | $1,008$ | $1,008$ ✓ |
+| $(5, 6)$ | $2,880$ | $2,880$ ✓ |
 
 ### 8.2 Larger Cases (GPU-Verified)
 
 | $(v, c)$ | Formula Result | GPU Count |
 |:--------:|---------------:|----------:|
-| $(6, 8)$ | $812,520$ | $812,520$ ✓ |
-| $(6, 10)$ | $225,792$ | $225,792$ ✓ |
-| $(8, 8)$ | $30,806,160$ | $30,806,160$ ✓ |
+| $(5, 7)$ | $26,880$ | $26,880$ ✓ |
+| $(6, 7)$ | $57,600$ | $57,600$ ✓ |
+| $(6, 8)$ | $725,760$ | $725,760$ ✓ |
 
 ---
 

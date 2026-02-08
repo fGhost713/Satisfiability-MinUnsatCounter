@@ -163,7 +163,7 @@ RESULT: f_all(v=5, l=3, c=12) = 1,142,018,600
 | 5   | 11  | 258,380,800 |
 | 5   | 12  | 1,142,018,600 |
 
-## The Closed-Form Formula (2-SAT)
+## The Closed-Form Formula (2-SAT) for immediately computing the amount of Minimal Unsatisfiable 2-SAT formulas for fixed $v$ variables and $c$ clauses.
 
 For diagonal $d = c - v$:
 
@@ -181,7 +181,7 @@ $$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+u/2} \cdot 2^{c - B(d,u)}
 
 The coefficients $A(d, u)$ and $B(d, u)$ follow specific patterns based on whether $d$ is a power of 2.
 
-See `MATHEMATICAL_PROOF_2SAT_MINUNSAT_DETAILED.md` for the complete proof.
+See `MATHEMATICAL_PROOF_2SAT_MINUNSAT_DETAILED.md` in the `documents` folder for the complete proof.
 
 ## How It Works
 

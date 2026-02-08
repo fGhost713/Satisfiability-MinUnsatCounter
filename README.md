@@ -19,7 +19,7 @@ We denote this count as $f_{\text{all}}(v, l, c)$ where:
 ## Installation
 
 ### Prerequisites
-- .NET 8.0 SDK or later
+- .NET 10.0 SDK or later
 - (Optional) CUDA-capable GPU for acceleration
 
 ### Build

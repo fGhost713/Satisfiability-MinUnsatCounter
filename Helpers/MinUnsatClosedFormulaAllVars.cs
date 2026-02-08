@@ -97,7 +97,7 @@ public static class MinUnsatClosedFormulaAllVars
     /// </summary>
     private static long ComputeM_Diagonal2(int c)
     {
-        if (c < 5) return 0;
+        if (c < 4) return 0;
         
         long n0 = ComputeN_Diagonal2_u0(c);
         long n2 = ComputeN_Diagonal2_u2(c);
@@ -142,7 +142,7 @@ public static class MinUnsatClosedFormulaAllVars
 
     private static long ComputeN_Diagonal2_u0(int c)
     {
-        if (c < 5) return 0;
+        if (c < 4) return 0;
         long factorial = Factorial(c - 2);
         long binomial = Binomial(c - 1, 3);
         return Shift(factorial * binomial, c - 5);

@@ -137,6 +137,30 @@ public class CpuMinUnsatCounterManyVars
         long[] threadCounts = new long[numThreads];
         long[] threadProcessed = new long[numThreads];
         
+        // Checkpoint support (limited for CPU - saves on cancel but cannot resume mid-calculation)
+        CalculationCheckpoint? checkpoint = null;
+        if (useCheckpoint)
+        {
+            checkpoint = CalculationCheckpoint.TryLoad(numVariables, literalsPerClause, numClauses);
+            if (checkpoint != null && checkpoint.ProcessedCombinations > 0 && checkpoint.ProcessedCombinations < totalCombinations)
+            {
+                if (verbose)
+                {
+                    Console.WriteLine($"[CpuManyVars] Warning: CPU mode cannot resume from checkpoint. Starting fresh.");
+                    Console.WriteLine($"[CpuManyVars] (Previous progress: {100.0 * checkpoint.ProcessedCombinations / totalCombinations:F1}%)");
+                }
+            }
+            
+            // Create new checkpoint for saving on cancel
+            checkpoint = new CalculationCheckpoint
+            {
+                NumVariables = numVariables,
+                LiteralsPerClause = literalsPerClause,
+                NumClauses = numClauses,
+                TotalCombinations = totalCombinations
+            };
+        }
+        
         // Progress reporting
         long sharedProcessed = 0;
         var progressSw = Stopwatch.StartNew();
@@ -308,36 +332,53 @@ public class CpuMinUnsatCounterManyVars
         });
 
         long processedCombinations = 0;
-        for (int i = 0; i < numThreads; i++)
-        {
-            totalCount += threadCounts[i];
-            processedCombinations += threadProcessed[i];
-        }
+            for (int i = 0; i < numThreads; i++)
+            {
+                totalCount += threadCounts[i];
+                processedCombinations += threadProcessed[i];
+            }
 
-        sw.Stop();
+            sw.Stop();
 
-        if (ct.IsCancellationRequested)
-        {
+            if (ct.IsCancellationRequested)
+            {
+                // Save checkpoint on cancellation
+                if (useCheckpoint && checkpoint != null)
+                {
+                    checkpoint.ProcessedCombinations = processedCombinations;
+                    checkpoint.CurrentCount = totalCount;
+                    checkpoint.ElapsedMsBeforeCheckpoint = sw.ElapsedMilliseconds;
+                    checkpoint.Save();
+                    if (verbose) Console.WriteLine($"[CpuManyVars] Checkpoint saved on cancel: {processedCombinations:N0} combinations");
+                }
+            
+                result.Count = totalCount;
+                result.WasCancelled = true;
+                result.ProcessedCombinations = processedCombinations;
+                result.ElapsedMs = sw.ElapsedMilliseconds;
+                return result;
+            }
+        
+            // Delete checkpoint on successful completion
+            if (useCheckpoint && checkpoint != null)
+            {
+                checkpoint.Delete();
+                if (verbose) Console.WriteLine($"[CpuManyVars] Checkpoint deleted (completed successfully)");
+            }
+
+            if (verbose)
+            {
+                Console.WriteLine($"\n=== Results (CpuManyVars) ===");
+                Console.WriteLine($"Time: {sw.Elapsed.TotalSeconds:F2}s");
+                Console.WriteLine($"Count: {totalCount:N0}");
+                Console.WriteLine($"Rate: {totalCombinations / Math.Max(0.001, sw.Elapsed.TotalSeconds):N0}/s");
+            }
+
             result.Count = totalCount;
-            result.WasCancelled = true;
-            result.ProcessedCombinations = processedCombinations;
+            result.ProcessedCombinations = totalCombinations;
             result.ElapsedMs = sw.ElapsedMilliseconds;
             return result;
         }
-
-        if (verbose)
-        {
-            Console.WriteLine($"\n=== Results (CpuManyVars) ===");
-            Console.WriteLine($"Time: {sw.Elapsed.TotalSeconds:F2}s");
-            Console.WriteLine($"Count: {totalCount:N0}");
-            Console.WriteLine($"Rate: {totalCombinations / Math.Max(0.001, sw.Elapsed.TotalSeconds):N0}/s");
-        }
-
-        result.Count = totalCount;
-        result.ProcessedCombinations = totalCombinations;
-        result.ElapsedMs = sw.ElapsedMilliseconds;
-        return result;
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool NextCombination(int[] indices, int k, int n)

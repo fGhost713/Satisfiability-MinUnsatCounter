@@ -219,9 +219,44 @@ public class GpuMinUnsatCounterManyVars : IDisposable
 
         long totalCount = 0;
         long processedChunks = 0;
+        long elapsedMsBeforeResume = 0;
+
+        // Try to resume from checkpoint
+        CalculationCheckpoint? checkpoint = null;
+        if (useCheckpoint)
+        {
+            checkpoint = CalculationCheckpoint.TryLoad(numVariables, literalsPerClause, numClauses);
+            if (checkpoint != null && checkpoint.ProcessedCombinations > 0 && checkpoint.ProcessedCombinations < totalCombinations)
+            {
+                // Resume from checkpoint
+                long resumeFromChunk = checkpoint.ProcessedCombinations / ChunkSize;
+                processedChunks = resumeFromChunk;
+                totalCount = checkpoint.CurrentCount;
+                elapsedMsBeforeResume = checkpoint.ElapsedMsBeforeCheckpoint;
+                
+                if (verbose)
+                {
+                    double resumeProgress = 100.0 * checkpoint.ProcessedCombinations / totalCombinations;
+                    Console.WriteLine($"[GpuManyVars] Resuming from checkpoint: {resumeProgress:F1}% ({checkpoint.ProcessedCombinations:N0} combinations)");
+                    Console.WriteLine($"[GpuManyVars] Prior count: {totalCount:N0}, Prior time: {elapsedMsBeforeResume / 1000.0:F1}s");
+                }
+            }
+            else
+            {
+                // Create new checkpoint
+                checkpoint = new CalculationCheckpoint
+                {
+                    NumVariables = numVariables,
+                    LiteralsPerClause = literalsPerClause,
+                    NumClauses = numClauses,
+                    TotalCombinations = totalCombinations
+                };
+            }
+        }
 
         var sw = Stopwatch.StartNew();
         var progressSw = Stopwatch.StartNew();
+        var checkpointSw = Stopwatch.StartNew();
 
         Task<long>? pendingSumTask = null;
 
@@ -230,10 +265,26 @@ public class GpuMinUnsatCounterManyVars : IDisposable
             if (ct.IsCancellationRequested)
             {
                 if (verbose) Console.WriteLine($"\n[GpuManyVars] Cancelled");
+                
+                // Save checkpoint on cancellation
+                if (useCheckpoint && checkpoint != null)
+                {
+                    if (pendingSumTask != null)
+                    {
+                        totalCount += pendingSumTask.Result;
+                        pendingSumTask = null;
+                    }
+                    checkpoint.ProcessedCombinations = processedChunks * ChunkSize;
+                    checkpoint.CurrentCount = totalCount;
+                    checkpoint.ElapsedMsBeforeCheckpoint = elapsedMsBeforeResume + sw.ElapsedMilliseconds;
+                    checkpoint.Save();
+                    if (verbose) Console.WriteLine($"[GpuManyVars] Checkpoint saved on cancel: {checkpoint.ProcessedCombinations:N0} combinations");
+                }
+                
                 result.Count = totalCount + (pendingSumTask?.Result ?? 0);
                 result.WasCancelled = true;
                 result.ProcessedCombinations = processedChunks * ChunkSize;
-                result.ElapsedMs = sw.ElapsedMilliseconds;
+                result.ElapsedMs = elapsedMsBeforeResume + sw.ElapsedMilliseconds;
                 return result;
             }
 
@@ -271,38 +322,70 @@ public class GpuMinUnsatCounterManyVars : IDisposable
 
             processedChunks += currentBatchChunks;
 
-            if (verbose && progressSw.Elapsed.TotalSeconds >= 5)
-            {
-                long currentProcessed = processedChunks * ChunkSize;
-                double progress = 100.0 * processedChunks / totalChunks;
-                double rate = currentProcessed / Math.Max(0.001, sw.Elapsed.TotalSeconds);
-                long remaining = totalCombinations - currentProcessed;
-                string etaStr = "";
-                if (rate > 0 && remaining > 0)
+                if (verbose && progressSw.Elapsed.TotalSeconds >= 5)
                 {
-                    var eta = TimeSpan.FromSeconds(remaining / rate);
-                    etaStr = eta.TotalHours >= 1 ? $", ETA: {(int)eta.TotalHours}h {eta.Minutes}m" :
-                             eta.TotalMinutes >= 1 ? $", ETA: {eta.Minutes}m {eta.Seconds}s" :
-                             $", ETA: {eta.Seconds}s";
+                    long currentProcessed = processedChunks * ChunkSize;
+                    double progress = 100.0 * processedChunks / totalChunks;
+                    double totalElapsedSeconds = (elapsedMsBeforeResume / 1000.0) + sw.Elapsed.TotalSeconds;
+                    double rate = currentProcessed / Math.Max(0.001, totalElapsedSeconds);
+                    long remaining = totalCombinations - currentProcessed;
+                    string etaStr = "";
+                    if (rate > 0 && remaining > 0)
+                    {
+                        var eta = TimeSpan.FromSeconds(remaining / rate);
+                        etaStr = eta.TotalHours >= 1 ? $", ETA: {(int)eta.TotalHours}h {eta.Minutes}m" :
+                                 eta.TotalMinutes >= 1 ? $", ETA: {eta.Minutes}m {eta.Seconds}s" :
+                                 $", ETA: {eta.Seconds}s";
+                    }
+                    Console.WriteLine($"[GpuManyVars] Progress: {progress:F1}%, Rate: {rate:N0}/s{etaStr}");
+                    progressSw.Restart();
                 }
-                Console.WriteLine($"[GpuManyVars] Progress: {progress:F1}%, Rate: {rate:N0}/s{etaStr}");
-                progressSw.Restart();
+            
+                // Save checkpoint every 30 seconds
+                if (useCheckpoint && checkpoint != null && checkpointSw.Elapsed.TotalSeconds >= 30)
+                {
+                    if (pendingSumTask != null)
+                    {
+                        totalCount += pendingSumTask.Result;
+                        pendingSumTask = null;
+                    }
+                
+                    checkpoint.ProcessedCombinations = processedChunks * ChunkSize;
+                    checkpoint.CurrentCount = totalCount;
+                    checkpoint.ElapsedMsBeforeCheckpoint = elapsedMsBeforeResume + sw.ElapsedMilliseconds;
+                    checkpoint.Save();
+                
+                    if (verbose)
+                    {
+                        Console.WriteLine($"[GpuManyVars] Checkpoint saved: {checkpoint.ProcessedCombinations:N0} combinations, count={totalCount:N0}");
+                    }
+                    checkpointSw.Restart();
+                }
             }
-        }
 
-        if (pendingSumTask != null) totalCount += pendingSumTask.Result;
-        sw.Stop();
+            if (pendingSumTask != null) totalCount += pendingSumTask.Result;
+            sw.Stop();
+        
+            // Delete checkpoint on successful completion
+            if (useCheckpoint && checkpoint != null)
+            {
+                checkpoint.Delete();
+                if (verbose) Console.WriteLine($"[GpuManyVars] Checkpoint deleted (completed successfully)");
+            }
+        
+            long totalElapsedMs = elapsedMsBeforeResume + sw.ElapsedMilliseconds;
 
-        if (verbose)
-        {
-            Console.WriteLine($"\n=== Results (ManyVars) ===");
-            Console.WriteLine($"Time: {sw.Elapsed.TotalSeconds:F2}s");
-            Console.WriteLine($"Count: {totalCount:N0}");
-            Console.WriteLine($"Rate: {totalCombinations / Math.Max(0.001, sw.Elapsed.TotalSeconds):N0}/s");
-        }
+            if (verbose)
+            {
+                Console.WriteLine($"\n=== Results (ManyVars) ===");
+                Console.WriteLine($"Time: {totalElapsedMs / 1000.0:F2}s" + (elapsedMsBeforeResume > 0 ? $" (resumed, this session: {sw.Elapsed.TotalSeconds:F2}s)" : ""));
+                Console.WriteLine($"Count: {totalCount:N0}");
+                Console.WriteLine($"Rate: {totalCombinations / (totalElapsedMs / 1000.0):N0}/s");
+            }
 
-        result.Count = totalCount;
-        result.ProcessedCombinations = totalCombinations;
+            result.Count = totalCount;
+            result.ProcessedCombinations = totalCombinations;
+            result.ElapsedMs = totalElapsedMs;
         result.ElapsedMs = sw.ElapsedMilliseconds;
         return result;
     }

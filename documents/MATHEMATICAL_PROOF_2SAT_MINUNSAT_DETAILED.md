@@ -968,6 +968,7 @@ The following results have been verified by exhaustive GPU computation:
 | 6 | 11| 5 | 34,560           | 34,560          | OK     |
 | 6 | 12| 6 | 1,920            | 1,920           | OK     |
 | 7 | 8 | 1 | 1,209,600        | 1,209,600       | OK     |
+| 8 | 9 | 1 | 27,095,040       | 27,095,040      | OK     |
 
 ---
 

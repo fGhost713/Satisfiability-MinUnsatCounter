@@ -1,7 +1,8 @@
-# MIN-UNSAT k-SAT Counter
+﻿# MIN-UNSAT k-SAT Counter
 
 A GPU-accelerated tool for counting **minimally unsatisfiable k-SAT formulas** (2-SAT and 3-SAT).
 
+Finding no existing MinUnsat counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula for the 2-SAT MinUnsat count.
 ## What This Counts
 
 This tool counts k-CNF formulas $\phi$ that satisfy ALL of the following:
@@ -81,6 +82,20 @@ minunsat formula -v 5 -c 6 --details
 
 # Verify formula against known GPU-computed values
 minunsat formula --verify
+
+# Large-scale computation (computed in ~1-2 seconds!)
+minunsat formula -v 100 -c 150
+```
+
+**Example output for large values:**
+```
+=== MIN-UNSAT k-SAT Counter ===
+
+Mode: Closed-Form Formula (2-SAT only)
+Variables (v): 100
+Clauses (c): 150
+
+RESULT: f_all(v=100, k=2, c=150) = 302.655.795.792.297.559.643.937.397.980.066.992.082.631.605.482.382.793.871.890.146.731.442.861.406.331.144.939.067.438.757.965.146.142.869.103.108.087.043.692.097.953.728.174.204.248.463.659.897.632.703.795.116.458.254.003.993.440.588.689.891.360.137.143.007.789.134.643.200.000.000.000.000.000.000.000
 ```
 
 **Note:** Closed-form formula is only available for 2-SAT. Use GPU mode for 3-SAT.

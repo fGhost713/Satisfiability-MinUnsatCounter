@@ -4,7 +4,7 @@
 > **Subject:** Closed-form formula for counting minimal unsatisfiable 2-SAT formulas  
 > **Target Audience:** Mathematicians, including those not specializing in Boolean satisfiability  
 > **Prerequisites:** Basic combinatorics, elementary group theory  
-> **Version:** 2.0 (Extended Edition)
+> **Version:** 2.1 (Extended Edition)
 
 ---
 
@@ -134,7 +134,7 @@ QED
 **Example 1.1.5:**  
 For $v = 3$ variables $(x_1, x_2, x_3)$:
 
-$$|\mathcal{C}_3| = 2 \times 3 \times 2 = 12 \text{ possible clauses}$$
+$$|\mathcal{C}_3| = 4 \binom{3}{2} = 4 \times 3 = 12 \text{ possible clauses}$$
 
 The 12 clauses are:
 
@@ -414,7 +414,7 @@ Therefore, it is UNSAT.
 #### 5.1 The Lower Bound
 
 **Theorem 5.1.1** (Minimum Clause Bound).  
-A MIN-UNSAT 2-CNF formula using k variables requires at least k + 1 clauses.
+A MIN-UNSAT 2-CNF formula using $k \geq 3$ variables requires at least k + 1 clauses.
 
 *Proof.*  
 **Step 1:** Each clause contributes 2 edges to the implication graph.
@@ -425,7 +425,9 @@ A MIN-UNSAT 2-CNF formula using k variables requires at least k + 1 clauses.
 
 **Step 3:** For minimality, when all k variables participate, the "conflict cycle" through x and ~x must involve paths through all variables. The minimum such cycle requires k + 1 edges (clauses).
 
-**Step 4:** This bound is tight -- we can construct MIN-UNSAT formulas with exactly k + 1 clauses for any k >= 2. QED
+**Step 4:** This bound is tight -- we can construct MIN-UNSAT formulas with exactly k + 1 clauses for any k >= 3. QED
+
+**Remark:** For k = 2, the minimum is c = 4 (all four possible clauses over two variables are required), giving d = 2.
 
 **Definition 5.1.1** (Diagonal Parameter).  
 For a formula with $c$ clauses and $k$ variables, the *diagonal* is:
@@ -816,9 +818,21 @@ $$N(5, 3, 2) = 3! \cdot \binom{4}{4} \cdot 2^{5-6} = 6 \cdot 1 \cdot \frac{1}{2}
 
 **For u = 4 (exactly 4 unbalanced variables):**
 
-$$A(d, 4) = \begin{cases} 3 & \text{if } d \text{ is a power of 2} \\ 1 & \text{otherwise} \end{cases}$$
+$$A(d, 4) = \begin{cases} 1 & \text{if } d = 2 \\ 3 & \text{if } d = 2^m \text{ for } m \geq 2 \\ 1 & \text{otherwise} \end{cases}$$
 
-$$B(d, 4) = \begin{cases} d + 7 & \text{if } d \text{ is a power of 2} \\ d + 6 & \text{otherwise} \end{cases}$$
+$$B(d, 4) = \begin{cases} d + 7 & \text{if } d = 2^m \text{ for } m \geq 1 \\ d + 6 & \text{otherwise} \end{cases}$$
+
+**Note:** Although $d = 2$ is a power of 2, the $u = 4$ coefficient $A(2, 4) = 1$ (not 3). The $A = 3$ pattern applies only for $d \geq 4$ among powers of 2.
+
+#### 11.7 Coefficient Patterns for u = 6
+
+**For u = 6 (exactly 6 unbalanced variables):**
+
+This term is relevant only for $d = 3$ and sufficiently large $c$:
+
+$$A(3, 6) = \frac{1}{3}, \quad B(3, 6) = 11$$
+
+**Note:** For most parameter ranges, $\binom{c-1}{2d-1+3} = 0$ and this term vanishes. It contributes non-trivially only for $d = 3$ with large $c$ (e.g., $v = 6$, $c = 9$).
 
 ---
 
@@ -844,7 +858,7 @@ $$m(c, c-1) = (c-1)! \cdot (c-2) \cdot (c-3) \cdot 2^{c-5}$$
 
 $$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+u/2} \cdot 2^{c - B(d,u)}$$
 
-with coefficients as specified in Sections 11.4-11.6.
+with coefficients as specified in Sections 11.4-11.7.
 
 #### 12.2 Algorithm Summary
 
@@ -859,7 +873,8 @@ To compute f_all(v, c):
    a. Compute N(c, k, 0) using formula with A(d,0), B(d,0)
    b. Compute N(c, k, 2) using formula with A(d,2), B(d,2)
    c. Compute N(c, k, 4) using formula with A(d,4), B(d,4)
-   d. Return N(c,k,0) + 4*N(c,k,2) + 16*N(c,k,4) + ...
+   d. Compute N(c, k, 6) using formula with A(d,6), B(d,6)
+   e. Return N(c,k,0) + 4*N(c,k,2) + 16*N(c,k,4) + 64*N(c,k,6) + ...
 ```
 
 ---
@@ -1064,7 +1079,7 @@ $$f_{\text{all}}(v, v+2) = N(c,v,0) + 4 \cdot N(c,v,2) + 16 \cdot N(c,v,4)$$
 where:
 - $N(c,v,0) = v! \cdot \binom{c-1}{3} \cdot 2^{c-5}$
 - $N(c,v,2) = v! \cdot \binom{c-1}{4} \cdot 2^{c-6}$
-- $N(c,v,4) = 3 \cdot v! \cdot \binom{c-1}{5} \cdot 2^{c-9}$
+- $N(c,v,4) = v! \cdot \binom{c-1}{5} \cdot 2^{c-9}$
 
 ### Appendix C: Sample Code Implementation
 
@@ -1111,8 +1126,8 @@ public static long ComputeMinUnsatAllVars(int v, int c)
 
 ---
 
-*Document Version: 2.0 Extended Edition*  
-*Generated: 2026 by Sascha*  
+*Document Version: 2.1 Extended Edition*  
+*Generated: 2026 by Sascha with help from Copilot*  
 *Verified: All formulas validated against exhaustive GPU computation*
 
 QED

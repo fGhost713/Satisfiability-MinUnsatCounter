@@ -2,7 +2,7 @@
 
 > **Document Type:** Technical Algorithm Specification  
 > **Subject:** GPU-accelerated counting of Minimal Unsatisfiable k-SAT formulas  
-> **Version:** 1.1  
+> **Version:** 1.2  
 > **Last Updated:** 2026
 
 ---
@@ -33,13 +33,13 @@ This document describes the algorithm used in our MIN-UNSAT counter to efficient
 
 | Metric | Naive Approach | Our Approach |
 |--------|---------------|--------------|
-| UNSAT check per formula | O(2^v × c) | **O(c)** * |
-| Minimality check per formula | O(c² × 2^v) | **O(c)** * |
-| Total per formula | O(c² × 2^v) | **O(c)** * |
-| Throughput (GPU) | ~100K formulas/s | **~800M formulas/s** † |
+| UNSAT check per formula | O(2^v × c × k) | **O(c)** * |
+| Minimality check per formula | O(c² × 2^v × k) | **O(c)** * |
+| Total per formula | O(c² × 2^v × k) | **O(c)** * |
+| Throughput (GPU) | ~100K formulas/s | **~15B formulas/s** † |
 
-\* For v ≤ 6 (single 64-bit word). For v > 6, complexity is O(c × ⌈2^v / 64⌉).  
-† Based on ~14 billion bitwise ops/sec ÷ ~16 ops per formula check.
+\* For v ≤ 6 (single 64-bit word). For v > 6, complexity is O(c × ⌈2<sup>v</sup> / 64⌉).  
+† Measured on NVIDIA RTX 4060 (v=6, k=2, c=8). Each formula check involves ~16 bitwise ops, so ~15B formulas/s ≈ 240B bitwise ops/s. CPU optimized (12 cores): ~1.3B formulas/s.
 
 The key insight: **Precompute clause "coverage masks" once, then use bitwise operations for O(1) assignment checking.**
 
@@ -82,7 +82,7 @@ The number of possible clause combinations grows rapidly:
 | 4 | 2 | 24 | 6 | 134,596 |
 | 5 | 2 | 40 | 7 | 18,643,560 |
 | 6 | 2 | 60 | 8 | 2,558,620,845 |
-| 6 | 3 | 160 | 10 | 6,540,715,896,000 |
+| 6 | 3 | 160 | 10 | 2,274,048,887,320,496 |
 
 ---
 
@@ -105,7 +105,7 @@ function IsUNSAT_Naive(φ, v):
     return true  // No satisfying assignment exists
 ```
 
-**Complexity: O(2^v × c)** per formula
+**Complexity: O(2^v × c × k)** per formula
 
 ### 3.2 Naive Minimality Check
 
@@ -115,23 +115,24 @@ To check if UNSAT formula φ is minimal:
 function IsMinimal_Naive(φ, v):
     for each clause C_i in φ:              // c iterations
         φ' = φ \ {C_i}                     // Remove clause i
-        if IsUNSAT_Naive(φ', v):           // O(2^v × c)
+        if IsUNSAT_Naive(φ', v):           // O(2^v × c × k)
             return false  // φ' is still UNSAT, so C_i was redundant
     return true  // Every clause is essential
 ```
 
-**Complexity: O(c × 2^v × c) = O(c² × 2^v)** per formula
+**Complexity: O(c × 2<sup>v</sup> × c × k) = O(c² × 2<sup>v</sup> × k)** per formula
 
 ### 3.3 Why This Is Too Slow
 
 For v=6, k=2, c=8:
 - 2^6 = 64 assignments
 - c² = 64 clause pairs
-- Per formula: 64 × 64 = 4,096 operations
-- Total combinations: 2.5 billion
-- Total operations: **10 trillion** operations
+- k = 2 literals per clause
+- Per formula: 64 × 64 × 2 = 8,192 operations
+- Total combinations: ~2.56 billion
+- Total operations: **~21 trillion** operations
 
-Even at 10 billion ops/sec, this would take **1,000 seconds** just for one parameter set!
+Even at 10 billion ops/sec, this would take **~2,100 seconds** just for one parameter set!
 
 ---
 
@@ -216,8 +217,8 @@ This clause is falsified when x₁=0 AND x₂=0 (regardless of x₃):
 ### 5.3 Precomputing All Clause Masks
 
 ```csharp
-// For v=3, k=2: there are 2×3×2 = 12 possible clause types
-// Each clause type gets a precomputed mask
+// For v=3, k=2: there are C(3,2) × 2² = 3 × 4 = 12 possible clause types
+// (choose k variables from v, then assign polarity to each)
 
 ulong[] clauseMasks = new ulong[totalClauseTypes];
 for (int c = 0; c < totalClauseTypes; c++)
@@ -286,7 +287,7 @@ bool IsUNSAT_Fast(int[] clauseIndices, ulong[] clauseMasks, ulong allOnesMask)
 - Each iteration: 1 OR operation, 1 array access
 - Final comparison: 1 operation
 
-**Total: O(c)** — independent of v for v ≤ 6 (single 64-bit word). For v > 6, complexity scales as O(c × ⌈2^v / 64⌉).
+**Total: O(c)** — independent of v for v ≤ 6 (single 64-bit word). For v > 6, complexity scales as O(c × ⌈2<sup>v</sup> / 64⌉).
 
 ---
 
@@ -385,9 +386,9 @@ bool IsMinimal_Fast(int[] indices, ulong[] clauseMasks)
 
 Two formulas that differ only by **polarity flips** (swapping x_i ↔ ¬x_i) are structurally identical. Without accounting for this, we would overcount.
 
-**Example:** These are the "same" formula:
-- (x₁ ∨ x₂) ∧ (¬x₁ ∨ x₂)
-- (¬x₁ ∨ x₂) ∧ (x₁ ∨ x₂)  ← flip x₁
+**Example:** These are the "same" formula (same orbit under polarity flips):
+- (x₁ ∨ x₂) ∧ (¬x₁ ∨ ¬x₂)
+- (¬x₁ ∨ x₂) ∧ (x₁ ∨ ¬x₂)  ← flip x₁
 
 ### 8.2 Canonical Form Definition
 
@@ -628,10 +629,10 @@ For each chunk (1024 combinations):
 
 | Operation | Naive | Optimized |
 |-----------|-------|-----------|
-| UNSAT check | O(c × 2^v) | **O(c)** |
-| Minimality check | O(c² × 2^v) | **O(c)** |
+| UNSAT check | O(c × 2^v × k) | **O(c)** |
+| Minimality check | O(c² × 2^v × k) | **O(c)** |
 | Canonical check | O(c × k × v) | O(c × k) |
-| **Total per formula** | O(c² × 2^v) | **O(c × k)** |
+| **Total per formula** | O(c² × 2^v × k) | **O(c × k)** |
 
 ### 12.2 Why O(c) Instead of O(c × 2^v)?
 
@@ -640,7 +641,7 @@ The key is **precomputation**:
 - Each formula check uses only OR operations on precomputed masks
 - The 2^v factor is "baked into" the masks
 
-> **Note:** The O(c) complexity assumes v ≤ 6, where all 2^v assignments fit in a single 64-bit word. For v > 6, the complexity becomes O(c × ⌈2^v / 64⌉) due to multi-word mask operations.
+> **Note:** The O(c) complexity assumes v ≤ 6, where all 2<sup>v</sup> assignments fit in a single 64-bit word. For v > 6, the complexity becomes O(c × ⌈2<sup>v</sup> / 64⌉) due to multi-word mask operations.
 
 ### 12.3 Overall Complexity
 
@@ -652,20 +653,23 @@ Enumeration   = O(numCombinations × c × k)  [parallel, GPU]
 
 For v=6, k=2, c=8:
   Preprocessing: 60 × 64 = 3,840 operations
-  Enumeration: 2.5 billion × 8 × 2 = 40 billion bitwise operations
+  Enumeration: 2.56 billion combinations
   
-With GPU parallelism achieving ~14 billion bitwise ops/sec, this takes ~3 seconds!
-(Effective formula throughput: ~800 million formulas/sec)
+Measured performance (NVIDIA RTX 4060):
+  GPU: ~0.17s at ~15 billion formulas/s
+  CPU (12 cores): ~1.9s at ~1.3 billion formulas/s
 ```
 
-### 12.4 Comparison
+### 12.4 Comparison (v=6, k=2, c=8)
 
-| Approach | v=6, k=2, c=8 time |
-|----------|---------------------|
-| Naive (single thread) | ~1000 seconds |
-| Optimized (single thread) | ~250 seconds |
-| Optimized (16 CPU threads) | ~16 seconds |
-| Optimized (GPU, ~14B ops/s) | **~3 seconds** |
+| Approach | Time | Rate |
+|----------|------|------|
+| Optimized (single thread) † | ~23s | ~111M/s |
+| Optimized (12 CPU cores) | ~1.9s | ~1.3B/s |
+| Optimized (GPU, RTX 4060) | **~0.17s** | **~15B/s** |
+| GPU vs CPU speedup | 11.5x | — |
+
+† Estimated from 12-core result.
 
 ---
 
@@ -731,7 +735,7 @@ For optimal GPU cache performance:
 
 ### 13.4 Handling v > 6
 
-For v > 6, a single 64-bit mask can't hold all 2^v assignments. We use multiple ulongs:
+For v > 6, a single 64-bit mask can't hold all 2<sup>v</sup> assignments. We use multiple ulongs:
 
 | v | Assignments | Mask words needed |
 |:-:|:-----------:|:-----------------:|
@@ -741,7 +745,7 @@ For v > 6, a single 64-bit mask can't hold all 2^v assignments. We use multiple 
 | 9 | 512 | 8 |
 | 10 | 1024 | 16 |
 
-The algorithm complexity becomes O(c × w) where w = ⌈2^v / 64⌉ is the number of words needed. The 2^v factor reappears in this constant multiplier.
+The algorithm complexity becomes O(c × w) where w = ⌈2<sup>v</sup> / 64⌉ is the number of words needed. The 2<sup>v</sup> factor reappears in this constant multiplier.
 
 ---
 
@@ -753,9 +757,9 @@ The algorithm complexity becomes O(c × w) where w = ⌈2^v / 64⌉ is the numbe
 | Formula satisfies assignment? | formula, assignment | O(c × k) | O(c × k) |
 | Formula is UNSAT? | formula | O(2^v × c × k) | **O(c)** |
 | Formula is minimal? | formula | O(c × 2^v × c × k) | **O(c)** |
-| Count MIN-UNSAT formulas | (v, k, c) | O(combos × c² × 2^v) | **O(combos × c)** |
+| Count MIN-UNSAT formulas | (v, k, c) | O(combos × c² × 2^v × k) | **O(combos × c × k)** |
 
-The breakthrough: **O(c²×2^v) → O(c)** per formula via bitmask precomputation.
+The breakthrough: **O(c²×2^v×k) → O(c×k)** per formula via bitmask precomputation.
 
 ---
 
@@ -781,6 +785,6 @@ The breakthrough: **O(c²×2^v) → O(c)** per formula via bitmask precomputatio
 
 ---
 
-*Document Version: 1.0*  
+*Document Version: 1.2*  
 *Implementation: MinUnsatCounter (C# / ILGPU)*  
-*Performance: ~14 billion formula checks per second on GPU*
+*Performance: ~15 billion formula checks per second on GPU (NVIDIA RTX 4060)*

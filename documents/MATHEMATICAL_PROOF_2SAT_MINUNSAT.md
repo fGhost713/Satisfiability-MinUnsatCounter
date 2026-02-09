@@ -75,13 +75,15 @@ $\square$
 - Vertices: $V' = \{x_1, \neg x_1, \ldots, x_k, \neg x_k\}$ (2k vertices)
 - Edges: For each clause $(\ell_i \vee \ell_j)$, add edges $\neg\ell_i \to \ell_j$ and $\neg\ell_j \to \ell_i$
 
-**Theorem 3.1** (Minimum Clause Bound). A MIN-UNSAT 2-CNF formula with $k$ variables requires at least $k+1$ clauses.
+**Theorem 3.1** (Minimum Clause Bound). A MIN-UNSAT 2-CNF formula with $k \geq 3$ variables requires at least $k+1$ clauses.
 
 *Proof.* 
 1. A 2-CNF is UNSAT iff some variable $x$ and its negation $\neg x$ are in the same strongly connected component (SCC).
 2. For minimality, removing any clause must break this property.
 3. A cycle through $x$ and $\neg x$ requires at least $k+1$ edges (clauses) when all $k$ variables participate.
 $\square$
+
+**Remark.** For $k = 2$, the minimum is $c = 4$ (all four possible clauses over two variables are required), giving diagonal $d = 2$.
 
 ### 3.2 Coverage and Minimality Condition
 
@@ -180,6 +182,16 @@ $$B(d, 0) = \begin{cases} \frac{3d}{2} + 2 & \text{if } d = 2^m \\ d + 2 & \text
 
 For $u = 2$ (all $d \geq 2$):
 $$A(d, 2) = 1, \quad B(d, 2) = d + 4$$
+
+For $u = 4$:
+$$A(d, 4) = \begin{cases} 1 & \text{if } d = 2 \\ 3 & \text{if } d = 2^m \text{ for } m \geq 2 \\ 1 & \text{otherwise} \end{cases}$$
+
+$$B(d, 4) = \begin{cases} d + 7 & \text{if } d = 2^m \text{ for } m \geq 1 \\ d + 6 & \text{otherwise} \end{cases}$$
+
+For $u = 6$ (relevant only when $d = 3$):
+$$A(3, 6) = \frac{1}{3}, \quad B(3, 6) = 11$$
+
+**Note.** For most parameter ranges, terms with $u \geq 6$ vanish because $\binom{c-1}{2d-1+u/2} = 0$. The $u = 6$ term contributes non-trivially only for $d = 3$ with sufficiently large $c$.
 
 ### 5.4 Special Case: Diagonal d = 1
 
@@ -297,4 +309,4 @@ $\blacksquare$
 
 ---
 
-*Document generated: 2026 by Sascha*
+*Document generated: 2026 by Sascha with help from Copilot*

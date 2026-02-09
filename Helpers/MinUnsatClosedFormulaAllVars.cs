@@ -34,6 +34,7 @@ public static class MinUnsatClosedFormulaAllVars
     /// <summary>
     /// Compute MIN-UNSAT count using BigInteger for arbitrary precision.
     /// Supports large values of v and c that would overflow long.
+    /// Mirrors the same dispatch logic as Compute/ComputeMultiplier.
     /// </summary>
     public static BigInteger ComputeBig(int numVariables, int numClauses)
     {
@@ -43,15 +44,18 @@ public static class MinUnsatClosedFormulaAllVars
         if (numVariables == 2 && numClauses != 4) return 0;
         if (numVariables > 2 && numClauses < numVariables + 1) return 0;
         
-        int d = numClauses - numVariables;
+        int c = numClauses;
+        int k = numVariables;
+        int d = c - k;
         if (d < 1) return 0;
         
-        // Compute m(c, v) = ? 2^u × N(c, v, u) using BigInteger
-        BigInteger n0 = ComputeN_Big(numClauses, d, 0);
-        BigInteger n2 = ComputeN_Big(numClauses, d, 2);
-        BigInteger n4 = ComputeN_Big(numClauses, d, 4);
-        
-        return n0 + 4 * n2 + 16 * n4;
+        return d switch
+        {
+            1 => ComputeM_Diagonal1_Big(c),
+            2 => ComputeM_Diagonal2_Big(c),
+            3 => ComputeM_Diagonal3_Big(c),
+            _ => ComputeM_General_Big(c, k)
+        };
     }
 
     #endregion
@@ -354,6 +358,104 @@ public static class MinUnsatClosedFormulaAllVars
         bigResult /= denA;
         
         return bigResult;
+    }
+
+    #endregion
+
+    #region BigInteger Diagonal Formulas
+
+    /// <summary>
+    /// m(c,c-1) = (c-1)! × (c-2) × (c-3) × 2^(c-5)  [BigInteger version]
+    /// </summary>
+    private static BigInteger ComputeM_Diagonal1_Big(int c)
+    {
+        if (c < 4) return 0;
+        
+        BigInteger factorial = FactorialBig(c - 1);
+        BigInteger product = (BigInteger)(c - 2) * (c - 3);
+        int power = c - 5;
+        
+        BigInteger result = factorial * product;
+        if (power >= 0)
+            result <<= power;
+        else
+            result >>= (-power);
+        return result;
+    }
+
+    /// <summary>
+    /// m(c,c-2) = N(c,c-2,0) + 4·N(c,c-2,2) + 16·N(c,c-2,4)  [BigInteger version]
+    /// </summary>
+    private static BigInteger ComputeM_Diagonal2_Big(int c)
+    {
+        if (c < 4) return 0;
+        
+        BigInteger n0 = ComputeN_Diagonal2_Big(c, 0);
+        BigInteger n2 = ComputeN_Diagonal2_Big(c, 2);
+        BigInteger n4 = ComputeN_Diagonal2_Big(c, 4);
+        
+        return n0 + 4 * n2 + 16 * n4;
+    }
+
+    private static BigInteger ComputeN_Diagonal2_Big(int c, int u)
+    {
+        BigInteger factorial = FactorialBig(c - 2);
+        return u switch
+        {
+            0 => ShiftBig(factorial * BinomialBig(c - 1, 3), c - 5),
+            2 => ShiftBig(factorial * BinomialBig(c - 1, 4), c - 6),
+            4 => ShiftBig(factorial * BinomialBig(c - 1, 5), c - 9),
+            _ => 0
+        };
+    }
+
+    /// <summary>
+    /// m(c,c-3) = N(c,c-3,0) + 4·N(c,c-3,2) + 16·N(c,c-3,4) + 64·N(c,c-3,6)  [BigInteger version]
+    /// </summary>
+    private static BigInteger ComputeM_Diagonal3_Big(int c)
+    {
+        if (c < 6) return 0;
+        
+        BigInteger n0 = ComputeN_Diagonal3_Big(c, 0);
+        BigInteger n2 = ComputeN_Diagonal3_Big(c, 2);
+        BigInteger n4 = ComputeN_Diagonal3_Big(c, 4);
+        BigInteger n6 = ComputeN_Diagonal3_Big(c, 6);
+        
+        return n0 + 4 * n2 + 16 * n4 + 64 * n6;
+    }
+
+    private static BigInteger ComputeN_Diagonal3_Big(int c, int u)
+    {
+        BigInteger factorial = FactorialBig(c - 3);
+        return u switch
+        {
+            0 => ShiftBig(factorial * BinomialBig(c - 1, 5), c - 5) / 3,
+            2 => ShiftBig(factorial * BinomialBig(c - 1, 6), c - 7),
+            4 => ShiftBig(factorial * BinomialBig(c - 1, 7), c - 9),
+            6 => ShiftBig(factorial * BinomialBig(c - 1, 8), c - 11) / 3,
+            _ => 0
+        };
+    }
+
+    /// <summary>
+    /// General formula for d >= 4.  [BigInteger version]
+    /// </summary>
+    private static BigInteger ComputeM_General_Big(int c, int k)
+    {
+        int d = c - k;
+        if (d < 2) return 0;
+        
+        BigInteger n0 = ComputeN_Big(c, d, 0);
+        BigInteger n2 = ComputeN_Big(c, d, 2);
+        BigInteger n4 = ComputeN_Big(c, d, 4);
+        
+        return n0 + 4 * n2 + 16 * n4;
+    }
+
+    private static BigInteger ShiftBig(BigInteger val, int shift)
+    {
+        if (shift >= 0) return val << shift;
+        return val >> (-shift);
     }
 
     #endregion

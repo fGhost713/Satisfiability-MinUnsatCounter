@@ -1110,8 +1110,9 @@ public static long ComputeMinUnsatAllVars(int v, int c)
     long n0 = ComputeN(c, d, 0);
     long n2 = ComputeN(c, d, 2);
     long n4 = ComputeN(c, d, 4);
+    long n6 = ComputeN(c, d, 6); // non-zero for d=3
     
-    return n0 + 4 * n2 + 16 * n4;
+    return n0 + 4 * n2 + 16 * n4 + 64 * n6;
 }
 ```
 

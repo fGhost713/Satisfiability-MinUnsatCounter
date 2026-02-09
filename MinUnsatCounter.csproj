@@ -21,8 +21,4 @@
     <PackageReference Include="ILGPU.Algorithms" Version="1.5.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="documents\" />
-  </ItemGroup>
-
 </Project>

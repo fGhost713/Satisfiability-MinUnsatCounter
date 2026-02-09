@@ -2,7 +2,7 @@
 
 > **Document Type:** Technical Algorithm Specification  
 > **Subject:** GPU-accelerated counting of Minimal Unsatisfiable k-SAT formulas  
-> **Version:** 1.0  
+> **Version:** 1.1  
 > **Last Updated:** 2026
 
 ---
@@ -33,10 +33,13 @@ This document describes the algorithm used in our MIN-UNSAT counter to efficient
 
 | Metric | Naive Approach | Our Approach |
 |--------|---------------|--------------|
-| UNSAT check per formula | O(2^v × c) | **O(c)** |
-| Minimality check per formula | O(c² × 2^v) | **O(c)** |
-| Total per formula | O(c² × 2^v) | **O(c)** |
-| Throughput (GPU) | ~100K/s | **~14 billion/s** |
+| UNSAT check per formula | O(2^v × c) | **O(c)** * |
+| Minimality check per formula | O(c² × 2^v) | **O(c)** * |
+| Total per formula | O(c² × 2^v) | **O(c)** * |
+| Throughput (GPU) | ~100K formulas/s | **~800M formulas/s** † |
+
+\* For v ≤ 6 (single 64-bit word). For v > 6, complexity is O(c × ⌈2^v / 64⌉).  
+† Based on ~14 billion bitwise ops/sec ÷ ~16 ops per formula check.
 
 The key insight: **Precompute clause "coverage masks" once, then use bitwise operations for O(1) assignment checking.**
 
@@ -283,7 +286,7 @@ bool IsUNSAT_Fast(int[] clauseIndices, ulong[] clauseMasks, ulong allOnesMask)
 - Each iteration: 1 OR operation, 1 array access
 - Final comparison: 1 operation
 
-**Total: O(c)** — independent of v!
+**Total: O(c)** — independent of v for v ≤ 6 (single 64-bit word). For v > 6, complexity scales as O(c × ⌈2^v / 64⌉).
 
 ---
 
@@ -424,13 +427,16 @@ bool IsCanonical_AndGetOrbitSize(int[] indices, out int orbitSize)
     }
     
     // Check canonical and count stabilizer
+    // Note: Orbit sizes are calculated based on count-symmetry groups.
+    // A balanced variable (pos == neg) contributes to the stabilizer,
+    // meaning flipping that variable's polarity yields an equivalent formula.
     int stabilizer = 0;
     for (int var = 0; var < v; var++)
     {
         if (posCounts[var] < negCounts[var])
             return false;  // Not canonical
         if (posCounts[var] == negCounts[var])
-            stabilizer++;  // Balanced variable
+            stabilizer++;  // Balanced variable (polarity flip is a symmetry)
     }
     
     orbitSize = 1 << (v - stabilizer);
@@ -634,6 +640,8 @@ The key is **precomputation**:
 - Each formula check uses only OR operations on precomputed masks
 - The 2^v factor is "baked into" the masks
 
+> **Note:** The O(c) complexity assumes v ≤ 6, where all 2^v assignments fit in a single 64-bit word. For v > 6, the complexity becomes O(c × ⌈2^v / 64⌉) due to multi-word mask operations.
+
 ### 12.3 Overall Complexity
 
 ```
@@ -644,9 +652,10 @@ Enumeration   = O(numCombinations × c × k)  [parallel, GPU]
 
 For v=6, k=2, c=8:
   Preprocessing: 60 × 64 = 3,840 operations
-  Enumeration: 2.5 billion × 8 × 2 = 40 billion operations
+  Enumeration: 2.5 billion × 8 × 2 = 40 billion bitwise operations
   
-But with GPU parallelism (14 billion ops/sec), this takes ~3 seconds!
+With GPU parallelism achieving ~14 billion bitwise ops/sec, this takes ~3 seconds!
+(Effective formula throughput: ~800 million formulas/sec)
 ```
 
 ### 12.4 Comparison
@@ -656,7 +665,7 @@ But with GPU parallelism (14 billion ops/sec), this takes ~3 seconds!
 | Naive (single thread) | ~1000 seconds |
 | Optimized (single thread) | ~250 seconds |
 | Optimized (16 CPU threads) | ~16 seconds |
-| Optimized (GPU, 14B/s) | **~3 seconds** |
+| Optimized (GPU, ~14B ops/s) | **~3 seconds** |
 
 ---
 
@@ -680,15 +689,22 @@ int validCount;             // Thread's result
 
 ### 13.2 Key Code Snippets
 
-**Combined UNSAT + Minimality Check:**
+**Combined All-Variables + UNSAT + Minimality Check:**
 ```csharp
 ulong one = 0, two = 0;
+int usedVars = 0;
+
 for (int i = 0; i < c; i++)
 {
     ulong m = clauseMasks[indices[i]];
     two |= (one & m);
     one |= m;
+    usedVars |= clauseVarMasks[indices[i]];  // Track which variables are used
 }
+
+// All-variables check: every variable must appear in at least one clause
+if (usedVars != allVarsMask)
+    return;  // Skip: not all variables used
 
 if (one == allAssignmentsMask)  // UNSAT check
 {
@@ -725,7 +741,7 @@ For v > 6, a single 64-bit mask can't hold all 2^v assignments. We use multiple 
 | 9 | 512 | 8 |
 | 10 | 1024 | 16 |
 
-The algorithm remains O(c), but with a higher constant factor.
+The algorithm complexity becomes O(c × w) where w = ⌈2^v / 64⌉ is the number of words needed. The 2^v factor reappears in this constant multiplier.
 
 ---
 

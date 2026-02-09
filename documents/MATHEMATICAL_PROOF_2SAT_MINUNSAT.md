@@ -161,7 +161,9 @@ $\square$
 
 **Definition 5.2** (Diagonal). For a formula with $c$ clauses and $k$ variables, the *diagonal* is $d = c - k$.
 
-**Observation 5.1**. The diagonal $d$ represents the "excess" clauses beyond the minimum $k+1$ needed. We have $d \geq 1$ for MIN-UNSAT formulas.
+**Observation 5.1**. The diagonal $d$ equals the number of clauses beyond the variable count. For MIN-UNSAT formulas:
+- When $k \geq 3$: minimum $c = k+1$, so $d \geq 1$ (minimum $d = 1$)
+- When $k = 2$: minimum $c = 4$, so $d \geq 2$ (minimum $d = 2$)
 
 ### 5.3 The General N-Formula
 

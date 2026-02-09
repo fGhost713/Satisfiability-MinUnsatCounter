@@ -180,8 +180,8 @@ This formula has:
 - c = 3 clauses
 
 Let's evaluate phi under assignment (x_1, x_2, x_3) = (1, 1, 0):
-- Clause 1: (x_1 OR x_2) = (1 OR 1) = 1):  [OK]
-- Clause 2: (~x_1 OR x_3) = (0 OR 0) = 0   [FAIL]
+- Clause 1: (x_1 OR x_2) = (1 OR 1) = 1  [OK]
+- Clause 2: (~x_1 OR x_3) = (0 OR 0) = 0  [FAIL]
 - Clause 3: (~x_2 OR ~x_3) = (0 OR 1) = 1  [OK]
 
 Since Clause 2 is false, phi = 0 under this assignment.
@@ -1120,7 +1120,7 @@ public static long ComputeMinUnsatAllVars(int v, int c)
 ## References
 
 1. Papadimitriou, C.H. (1994). *Computational Complexity*. Addison-Wesley.
-2. Kleine Buning, H., & Kullmann, O. (2009). *Minimal Unsatisfiability and Autarkies*. Handbook of Satisfiability.
+2. Kleine Büning, H., & Kullmann, O. (2009). *Minimal Unsatisfiability and Autarkies*. Handbook of Satisfiability.
 3. Aspvall, B., Plass, M.F., & Tarjan, R.E. (1979). A linear-time algorithm for testing the truth of certain quantified Boolean formulas. *Information Processing Letters*.
 4. OEIS A082138: Number of labeled 2-regular simple digraphs on n nodes.
 
@@ -1130,4 +1130,4 @@ public static long ComputeMinUnsatAllVars(int v, int c)
 *Generated: 2026 by Sascha with help from Copilot*  
 *Verified: All formulas validated against exhaustive GPU computation*
 
-QED
+$\blacksquare$

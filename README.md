@@ -1,8 +1,18 @@
 ﻿# MIN-UNSAT k-SAT Counter
 
-A GPU-accelerated tool for counting **minimally unsatisfiable k-SAT formulas** (2-SAT and 3-SAT).
+A GPU-accelerated tool for counting **Minimally Unsatisfiable (MU) k-SAT formulas** (2-SAT and 3-SAT).
 
-Finding no existing MinUnsat counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula for the 2-SAT MinUnsat count.
+**Detailed explanation:**
+
+Enumerates and counts MU k-CNF formulas by GPU-accelerated brute-force search,
+with a closed-form solution for the 2-SAT case.
+A formula is MU if it is unsatisfiable yet every proper sub-formula is satisfiable — i.e., the formula itself is its only Minimal Unsatisfiable Subset (MUS).
+While MUS extraction tools (e.g., MUSE, MARCO) identify MUS cores within a given unsatisfiable formula,
+this project counts how many MU formulas exist for given parameters $(v, k, c)$.
+
+**Reason for development:**
+
+Finding no existing MU formula counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula for the 2-SAT MU count.
 
 ## What This Counts
 

@@ -55,20 +55,25 @@ dotnet publish -c Release -r osx-x64
 
 ### GPU Brute-Force Mode (Default)
 
-Enumerates all possible clause combinations and counts MIN-UNSAT formulas:
+Enumerates all possible clause combinations and counts MIN-UNSAT formulas.
+The best GPU engine is auto-selected based on k-SAT type and variable count:
+
+- **3-SAT (v ≤ 7):** V3 CPU-prefix GPU-suffix hybrid (~19 billion/s)
+- **2-SAT (v ≤ 6):** V2 optimized 64-bit kernel (~14 billion/s)
+- **v > 7:** ManyVars fallback (up to v = 10)
 
 ```bash
 # 2-SAT (default): 4 variables, 5 clauses
 minunsat minunsat -v 4 -c 5
 
-# 3-SAT: 5 variables, 12 clauses
+# 3-SAT: 5 variables, 12 clauses (auto-selects V3 hybrid engine)
 minunsat minunsat -v 5 -l 3 -c 12
+
+# 3-SAT: long computation with checkpoint save/resume
+minunsat minunsat -v 6 -l 3 -c 9 --checkpoint
 
 # Force CPU mode (no GPU)
 minunsat minunsat -v 4 -c 5 --cpu
-
-# Enable checkpointing for long-running calculations
-minunsat minunsat -v 5 -l 3 -c 12 --checkpoint
 ```
 
 **Options:**
@@ -76,12 +81,14 @@ minunsat minunsat -v 5 -l 3 -c 12 --checkpoint
 - `-l, --literals` (optional): Literals per clause, default=2 (2-SAT), use 3 for 3-SAT
 - `-c, --clauses` (required): Number of clauses
 - `--cpu`: Force CPU mode 
+- `-p, --prefix-depth`: V3 prefix depth (2 or 3). Default: auto (2 for c ≤ 12, 3 for c > 12)
 - `--checkpoint`: Enable checkpoint save/resume for long-running calculations
 - `--benchmark`: Run GPU vs CPU performance benchmark
 
 **Performance notes:** 
-- v ≤ 6: Uses optimized GPU/CPU kernels (fastest, ~14 billion/s on GPU)
-- v > 6: Uses fallback implementation (up to v = 10)
+- 3-SAT: V3 hybrid engine is auto-selected for v ≤ 7 (CPU-prefix pruning + GPU-suffix enumeration)
+- 2-SAT: V2 kernel is auto-selected for v ≤ 6; ManyVars for v > 6
+- Prefix depth is auto-tuned (2 for c ≤ 12, 3 for c > 12)
 - For 2-SAT with any v, use **formula mode** for instant computation
 
 > ⚠️ **Performance Warning:** For v > 6, performance drops significantly (~100x slower) because the fallback code is not yet highly optimized. The optimized kernels use 64-bit bitmasks which can only handle 2⁶ = 64 assignments. For v > 6, we use multi-word arrays which have more memory overhead. **For 2-SAT, always prefer the formula mode** which computes results instantly for any number of variables.
@@ -112,7 +119,7 @@ Mode: Closed-Form Formula (2-SAT only)
 Variables (v): 100
 Clauses (c): 150
 
-RESULT: f_all(v=100, k=2, c=150) = 302.655.795.792.297.559.643.937.397.980.066.992.082.631.605.482.382.793.871.890.146.731.442.861.406.331.144.939.067.438.757.965.146.142.869.103.108.087.043.692.097.953.728.174.204.248.463.659.897.632.703.795.116.458.254.003.993.440.588.689.891.360.137.143.007.789.134.643.200.000.000.000.000.000.000.000
+RESULT: f_all(v=100, k=2, c=150) = 201.351.488.957.534.947.773.288.983.608.563.011.415.511.474.896.510.305.388.382.385.420.667.257.972.473.782.615.376.058.546.021.865.449.371.651.692.870.937.975.565.915.204.882.102.451.385.563.114.583.867.794.038.126.475.060.509.996.548.422.040.331.241.311.223.590.227.003.802.910.720.000.000.000.000.000.000.000
 ```
 
 **Options:**
@@ -194,6 +201,10 @@ RESULT: f_all(v=5, l=3, c=12) = 1,142,018,600
 | 6   | 10  | 224,640 |
 | 6   | 11  | 34,560 |
 | 6   | 12  | 1,920 |
+| 7   | 8   | 1,209,600 |
+| 7   | 9   | 20,321,280 |
+| 7   | 10  | 26,611,200 |
+| 7   | 11  | 14,676,480 |
 
 ### 3-SAT ($k=3$)
 
@@ -210,6 +221,10 @@ RESULT: f_all(v=5, l=3, c=12) = 1,142,018,600
 | 5   | 10  | 18,080,760 |
 | 5   | 11  | 258,380,800 |
 | 5   | 12  | 1,142,018,600 |
+| 5   | 13  | 1,452,706,160 |
+| 6   | 8   | 7,800 |
+| 6   | 9   | 1,913,280 |
+| 7   | 8   | 5,040 |
 
 ## Closed-Form Formula (2-SAT)
 
@@ -227,7 +242,7 @@ where:
 
 $$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+u/2} \cdot 2^{c - B(d,u)}$$
 
-The coefficients $A(d, u)$ and $B(d, u)$ follow specific patterns based on whether $d$ is a power of 2.
+The coefficients $A(d, j)$ follow Burnside's lemma over the cycle automorphism group, and $B(d, j)$ follows patterns based on whether $d$ is a power of 2. The formula works for **any** d and u — no hardcoded special cases.
 
 See `MATHEMATICAL_PROOF_2SAT_MINUNSAT_DETAILED.md` in the `documents` folder for the complete proof.
 

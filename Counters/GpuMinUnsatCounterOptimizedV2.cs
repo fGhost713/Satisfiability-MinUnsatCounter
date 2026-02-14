@@ -395,7 +395,13 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
 
     private static byte[] BuildRequiredClauseMask(ulong[] clauseMasks, int numAssignments, int totalClauses, bool verbose)
     {
-        // CPU-side pre-calculation (same as V1/CPU)
+        // Build multi-assignment coverage mask per clause.
+        // Each byte stores a bitmask of which "hard assignment groups" this clause covers.
+        // For v<=6 with 64 assignments, we select up to 8 independent assignments.
+        // A combination must cover ALL selected assignments to be UNSAT.
+        // This prunes ~(1-coverage_fraction)^K of combinations vs single-assignment pruning.
+
+        // Step 1: For each assignment, count how many clauses cover it
         int[] coverageCount = new int[numAssignments];
         for (int a = 0; a < numAssignments; a++)
         {
@@ -404,25 +410,79 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
                 if ((clauseMasks[c] & aMask) != 0) coverageCount[a]++;
         }
 
-        int hardestAssignment = 0;
-        int minCovering = int.MaxValue;
-        for (int a = 0; a < numAssignments; a++)
+        // Step 2: Select up to 8 assignments greedily (prefer rarest, maximize independence)
+        // Independence = each selected assignment is covered by a different set of clauses
+        const int MaxGroups = 8;
+        int[] selectedAssignments = new int[MaxGroups];
+        bool[] used = new bool[numAssignments];
+        int numGroups = 0;
+
+        for (int g = 0; g < MaxGroups && g < numAssignments; g++)
         {
-            if (coverageCount[a] < minCovering)
+            int best = -1;
+            int bestScore = int.MaxValue;
+
+            for (int a = 0; a < numAssignments; a++)
             {
-                minCovering = coverageCount[a];
-                hardestAssignment = a;
+                if (used[a]) continue;
+                if (coverageCount[a] < bestScore)
+                {
+                    bestScore = coverageCount[a];
+                    best = a;
+                }
+            }
+
+            if (best < 0) break;
+            selectedAssignments[numGroups++] = best;
+            used[best] = true;
+
+            // Mark "similar" assignments as used to maximize independence
+            // Two assignments are similar if they share many covering clauses
+            ulong bestCoverSet = 0;
+            for (int c = 0; c < totalClauses; c++)
+                if ((clauseMasks[c] & (1UL << best)) != 0) bestCoverSet |= 1UL << (c & 63);
+
+            for (int a = 0; a < numAssignments; a++)
+            {
+                if (used[a]) continue;
+                // Count overlap
+                int overlap = 0;
+                for (int c = 0; c < totalClauses; c++)
+                {
+                    bool coversA = (clauseMasks[c] & (1UL << a)) != 0;
+                    bool coversBest = (clauseMasks[c] & (1UL << best)) != 0;
+                    if (coversA && coversBest) overlap++;
+                }
+                // If >80% overlap with selected assignment, skip it (not independent)
+                if (overlap * 100 / Math.Max(1, coverageCount[a]) > 80)
+                    used[a] = true;
             }
         }
 
-        if (verbose) Console.WriteLine($"[Pruning] Hardest assignment {hardestAssignment} covered by {minCovering} clauses");
+        if (verbose)
+        {
+            Console.Write($"[Pruning] Multi-assignment: {numGroups} groups, coverage counts: ");
+            for (int g = 0; g < numGroups; g++)
+                Console.Write($"{coverageCount[selectedAssignments[g]]}/{totalClauses}{(g < numGroups - 1 ? ", " : "")}");
+            Console.WriteLine();
+        }
 
-        byte[] isRequired = new byte[totalClauses];
-        ulong hardestMask = 1UL << hardestAssignment;
+        // Step 3: For each clause, build a bitmask of which selected assignments it covers
+        // Set unused group bits to 1 so that allGroupsMask=0xFF works even with <8 groups
+        byte unusedGroupBits = (byte)(0xFF & ~((1 << numGroups) - 1)); // bits for non-existent groups
+        byte[] clauseGroupMask = new byte[totalClauses];
         for (int c = 0; c < totalClauses; c++)
-            if ((clauseMasks[c] & hardestMask) != 0) isRequired[c] = 1;
+        {
+            byte mask = unusedGroupBits; // unused bits pre-set to 1
+            for (int g = 0; g < numGroups; g++)
+            {
+                if ((clauseMasks[c] & (1UL << selectedAssignments[g])) != 0)
+                    mask |= (byte)(1 << g);
+            }
+            clauseGroupMask[c] = mask;
+        }
 
-        return isRequired;
+        return clauseGroupMask;
     }
 
     public void Dispose()
@@ -475,11 +535,10 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
             
             // Note: For V2, we don't do complex "Prefix Caching" state (onePre/twoPre)
             // because keeping that state coherent across updates in a flattened loop 
-            // is complex (requires stack for partial sums).
+             // is complex (requires stack for partial sums).
             // Instead, we rely on the GPU's L1/L2 cache to make clause mask fetches super fast.
             // Since `indices[0]...indices[k-2]` are constant for checking, they hit cache 100%.
-            
-            bool isUnsat = true;
+
             ulong one = 0, two = 0;
             int varCoverage = 0;
             uint posPacked = 0, negPacked = 0;
@@ -562,7 +621,7 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
         ArrayView<int> clauseVarMasks,
         ArrayView<uint> clausePosPacked,
         ArrayView<uint> clauseNegPacked,
-        ArrayView<byte> requiredMask,
+        ArrayView<byte> clauseGroupMask,
         int totalClauses,
         int clausesPerFormula,
         int variableCount,
@@ -571,8 +630,8 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
         int chunksToProcess,
         ArrayView<int> results)
     {
-        // Compute allVariablesMask locally to save kernel args
         int allVariablesMask = (1 << variableCount) - 1;
+        byte allGroupsMask = 0xFF;
 
         int globalId = Grid.GlobalIndex.X;
         if (globalId >= chunksToProcess) return;
@@ -585,64 +644,61 @@ public class GpuMinUnsatCounterOptimizedV2 : IDisposable
 
         for (int i = 0; i < ChunkSize; i++)
         {
-            // Pruning: Check if ANY clause is required
-            bool hasRequired = false;
+            // MERGED single-pass: compute ALL data in one loop to avoid warp divergence.
+            // The group check is folded in as one extra byte OR per clause (negligible cost).
+            // This avoids the two-loop pattern that caused warp divergence on GPU:
+            // with 5% pass rate, P(≥1 of 32 warp threads passes) = 79%, so both loops
+            // executed for most iterations anyway.
+            ulong one = 0, two = 0;
+            int varCoverage = 0;
+            uint posPacked = 0, negPacked = 0;
+            byte groupCoverage = 0;
+
             for (int k = 0; k < clausesPerFormula; k++)
             {
-                if (requiredMask[localIndices[k]] != 0)
-                {
-                    hasRequired = true;
-                    break;
-                }
+                int idx = localIndices[k];
+                ulong m = clauseMasks[idx];
+                two |= one & m;
+                one |= m;
+                varCoverage |= clauseVarMasks[idx];
+                posPacked += clausePosPacked[idx];
+                negPacked += clauseNegPacked[idx];
+                groupCoverage |= clauseGroupMask[idx];
             }
 
-            if (hasRequired)
+            // Check group coverage first (cheapest filter — 95% fail here)
+            // Then UNSAT + AllVars. No divergence: every thread does the same work above.
+            if (groupCoverage == allGroupsMask &&
+                one == allAssignmentsMask &&
+                varCoverage == allVariablesMask)
             {
-                ulong one = 0, two = 0;
-                int varCoverage = 0;
-                uint posPacked = 0, negPacked = 0;
-
+                ulong unique = one & ~two;
+                bool minimal = true;
                 for (int k = 0; k < clausesPerFormula; k++)
                 {
-                    int idx = localIndices[k];
-                    ulong m = clauseMasks[idx];
-                    two |= one & m;
-                    one |= m;
-                    varCoverage |= clauseVarMasks[idx];
-                    posPacked += clausePosPacked[idx];
-                    negPacked += clauseNegPacked[idx];
+                    if ((clauseMasks[localIndices[k]] & unique) == 0)
+                    {
+                        minimal = false;
+                        break;
+                    }
                 }
 
-                if (one == allAssignmentsMask && varCoverage == allVariablesMask)
+                if (minimal)
                 {
-                    ulong unique = one & ~two;
-                    bool minimal = true;
-                    for (int k = 0; k < clausesPerFormula; k++)
+                    bool canonical = true;
+                    int stabilizer = 0;
+                    for (int v = 0; v < variableCount; v++)
                     {
-                        if ((clauseMasks[localIndices[k]] & unique) == 0)
-                        {
-                            minimal = false;
-                            break;
-                        }
+                        int shift = v * 5;
+                        uint p = (posPacked >> shift) & 0x1F;
+                        uint n = (negPacked >> shift) & 0x1F;
+                        if (p < n) { canonical = false; break; }
+                        if (p == n) stabilizer++;
                     }
 
-                    if (minimal)
+                    if (canonical)
                     {
-                        bool canonical = true;
-                        int stabilizer = 0;
-                        for (int v = 0; v < variableCount; v++)
-                        {
-                            int shift = v * 5;
-                            uint p = (posPacked >> shift) & 0x1F;
-                            uint n = (negPacked >> shift) & 0x1F;
-                            if (p < n) { canonical = false; break; }
-                            if (p == n) stabilizer++;
-                        }
-
-                        if (canonical)
-                        {
-                            validCount += (1 << variableCount) >> stabilizer;
-                        }
+                        validCount += (1 << variableCount) >> stabilizer;
                     }
                 }
             }

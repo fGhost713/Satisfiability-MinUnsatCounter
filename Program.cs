@@ -1,378 +1,228 @@
-﻿using CommandLine;
+using System.Diagnostics;
+using CommandLine;
 using MinUnsatPublish.Counters;
 using MinUnsatPublish.Helpers;
 using MinUnsatPublish.Infrastructure;
 
 Console.WriteLine("=== MIN-UNSAT k-SAT Counter ===\n");
 
-// Setup cancellation
 using var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (sender, e) =>
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; Console.WriteLine("\n[!] Cancellation requested..."); cts.Cancel(); };
+
+// Known GPU-validated values for formula verification
+var KnownValues = new (int v, int c, long expected)[]
 {
-    e.Cancel = true;
-    Console.WriteLine("\n[!] Cancellation requested...");
-    cts.Cancel();
+    (3,4,6), (3,5,36), (3,6,4),
+    (4,5,144), (4,6,1008), (4,7,288), (4,8,24),
+    (5,6,2880), (5,7,26880), (5,8,14400), (5,9,2880), (5,10,192),
+    (6,7,57600), (6,8,725760), (6,9,633600), (6,10,224640), (6,11,34560), (6,12,1920),
 };
 
-var result = Parser.Default.ParseArguments<MinUnsatOptions, FormulaOptions, UnsatOptions>(args);
-result.WithParsed<MinUnsatOptions>(opts => RunMinUnsat(opts, cts.Token))
-      .WithParsed<FormulaOptions>(opts => RunFormula(opts))   
-      .WithParsed<UnsatOptions>(opts => RunUnsat(opts, cts.Token))
-      .WithNotParsed(errors => { /* Help text displayed automatically */ });
-
-
-
-
-
+Parser.Default.ParseArguments<MinUnsatOptions, FormulaOptions, UnsatOptions>(args)
+    .WithParsed<MinUnsatOptions>(opts => RunMinUnsat(opts, cts.Token))
+    .WithParsed<FormulaOptions>(RunFormula)
+    .WithParsed<UnsatOptions>(opts => RunUnsat(opts, cts.Token))
+    .WithNotParsed(_ => { });
 
 // ==================== MIN-UNSAT Counter ====================
+
 void RunMinUnsat(MinUnsatOptions opts, CancellationToken ct)
 {
-    // Handle benchmark mode
-    if (opts.Benchmark)
-    {
-        RunBenchmark(opts);
-        return;
-    }
-
-    string mode = opts.UseCpu ? "CPU" : "GPU";
-    Console.WriteLine($"Mode: {mode} Brute-Force ({opts.Literals}-SAT)");
-    Console.WriteLine($"Variables (v): {opts.Variables}");
-    Console.WriteLine($"Literals per clause (l): {opts.Literals}");
-    Console.WriteLine($"Clauses (c): {opts.Clauses}");
-    Console.WriteLine();
-
-
-
-
+    if (opts.Benchmark) { RunBenchmark(opts); return; }
 
     if (opts.Variables < opts.Literals || opts.Variables > 10)
-    {
-        Console.WriteLine($"Error: Variables must be between {opts.Literals} and 10");
-        return;
-    }
-
+    { Console.WriteLine($"Error: Variables must be between {opts.Literals} and 10"); return; }
     if (opts.Literals < 2 || opts.Literals > 3)
-    {
-        Console.WriteLine("Error: Literals per clause must be 2 or 3");
-        return;
-    }
-
-
-    int minClauses = opts.Literals == 2 ? opts.Variables + 1 : 8; // 2-SAT: v+1, 3-SAT: 8
+    { Console.WriteLine("Error: Literals per clause must be 2 or 3"); return; }
+    int minClauses = opts.Literals == 2 ? opts.Variables + 1 : 8;
     if (opts.Clauses < minClauses)
-    {
-        Console.WriteLine($"Error: Need at least {minClauses} clauses for {opts.Literals}-SAT MIN-UNSAT with {opts.Variables} variables");
-        return;
-    }
+    { Console.WriteLine($"Error: Need at least {minClauses} clauses for {opts.Literals}-SAT MIN-UNSAT with {opts.Variables} variables"); return; }
+
+    // Auto-select engine:
+    //   3-SAT + GPU + v<=7 -> V3 (CPU-prefix GPU-suffix hybrid)
+    //   2-SAT + GPU + v<=6 -> V2 (optimized 64-bit kernel)
+    //   GPU + v>6/v>7      -> ManyVars fallback
+    //   --cpu              -> CPU optimized (v<=6) or CPU ManyVars (v>6)
+    bool useV3 = opts.Literals == 3 && !opts.UseCpu && opts.Variables <= 7;
+
+    string engine = opts.UseCpu ? "CPU" :
+                    useV3 ? "GPU V3 Hybrid" :
+                    opts.Variables <= 6 ? "GPU V2" : "GPU ManyVars";
+    PrintHeader(engine, opts.Literals, opts.Variables, opts.Clauses);
 
     CountingResult countResult;
-    
-    if (opts.UseCpu)
+
+    if (useV3)
     {
-        if (opts.Variables <= 6)
-        {
-            // Use optimized CPU implementation (fastest for v<=6)
-            var cpuCounter = new CpuMinUnsatCounterOptimized();
-            countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
-        }
-        else
-        {
-            // Use CPU fallback for v > 6
-            var cpuCounter = new CpuMinUnsatCounterManyVars();
-            countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
-        }
+        using var v3 = new GpuMinUnsatCounterV3(preferGpu: true);
+        countResult = v3.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct,
+            verbose: true, useCheckpoint: opts.UseCheckpoint, prefixDepth: opts.PrefixDepth);
+    }
+    else if (opts.UseCpu)
+    {
+        countResult = opts.Variables <= 6
+            ? new CpuMinUnsatCounterOptimized().CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint)
+            : new CpuMinUnsatCounterManyVars().CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
     }
     else if (opts.Variables <= 6)
     {
-        // Use optimized GPU kernel V2 with chunking (fastest for v<=6)
-        using var gpuCounter = new GpuMinUnsatCounterOptimizedV2(preferGpu: true);
-        countResult = gpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
+        using var gpu = new GpuMinUnsatCounterOptimizedV2(preferGpu: true);
+        countResult = gpu.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
     }
     else
     {
-        // Use GPU fallback for v > 6 (many-vars kernel with array-based masks)
-        using var gpuCounter = new GpuMinUnsatCounterManyVars(preferGpu: true);
-        countResult = gpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
-    }
-    
-    Console.WriteLine();
-    if (countResult.WasCancelled)
-    {
-        Console.WriteLine($"[Cancelled] Processed: {countResult.ProcessedCombinations:N0} / {countResult.TotalCombinations:N0}");
-        Console.WriteLine($"[Partial] MIN-UNSAT count so far: {countResult.Count:N0}");
-    }
-    else
-    {
-        Console.WriteLine($"RESULT: f_all(v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}) = {countResult.Count:N0}");
-    }
-}
-
-// ==================== GPU vs CPU Benchmark ====================
-void RunBenchmark(MinUnsatOptions opts)
-{
-    Console.WriteLine($"=== Benchmark: GPU V2 vs CPU Optimized ===\n");
-    Console.WriteLine($"Configuration: v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}");
-    Console.WriteLine();
-
-    var (_, totalClauses) = ClauseLiteralMapper.BuildClauseLiteralMap(opts.Variables, opts.Literals);
-    long totalCombinations = CombinationGenerator.CountCombinations(totalClauses, opts.Clauses);
-    Console.WriteLine($"Total combinations: {totalCombinations:N0}");
-    Console.WriteLine();
-
-    // Warmup
-    Console.WriteLine("Warming up...");
-    {
-        var warmupCpu = new CpuMinUnsatCounterOptimized();
-        warmupCpu.Count(opts.Variables, opts.Literals, Math.Min(opts.Clauses, 5), verbose: false);
-        using var warmupGpu = new GpuMinUnsatCounterOptimizedV2(preferGpu: true);
-        warmupGpu.Count(opts.Variables, opts.Literals, Math.Min(opts.Clauses, 5), verbose: false);
-    }
-    GC.Collect();
-    GC.WaitForPendingFinalizers();
-    GC.Collect();
-
-    // Test 1: GPU V2
-    Console.WriteLine("\n--- Test 1: GPU V2 (GpuMinUnsatCounterOptimizedV2) ---");
-    long resultGpu;
-    double rateGpu;
-    using (var gpuCounter = new GpuMinUnsatCounterOptimizedV2(preferGpu: true))
-    {
-        var swGpu = System.Diagnostics.Stopwatch.StartNew();
-        resultGpu = gpuCounter.Count(opts.Variables, opts.Literals, opts.Clauses, verbose: false);
-        swGpu.Stop();
-        rateGpu = totalCombinations / swGpu.Elapsed.TotalSeconds;
-        Console.WriteLine($"Result: {resultGpu:N0}");
-        Console.WriteLine($"Time: {swGpu.Elapsed.TotalSeconds:F2}s");
-        Console.WriteLine($"Rate: {rateGpu:N0}/s");
+        using var gpu = new GpuMinUnsatCounterManyVars(preferGpu: true);
+        countResult = gpu.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true, useCheckpoint: opts.UseCheckpoint);
     }
 
-    GC.Collect();
-    GC.WaitForPendingFinalizers();
-    GC.Collect();
-
-    // Test 2: CPU Optimized
-    Console.WriteLine("\n--- Test 2: CPU Optimized (CpuMinUnsatCounterOptimized) ---");
-    var cpuCounter = new CpuMinUnsatCounterOptimized();
-    var swCpu = System.Diagnostics.Stopwatch.StartNew();
-    var resultCpu = cpuCounter.Count(opts.Variables, opts.Literals, opts.Clauses, verbose: false);
-    swCpu.Stop();
-    double rateCpu = totalCombinations / swCpu.Elapsed.TotalSeconds;
-    Console.WriteLine($"Result: {resultCpu:N0}");
-    Console.WriteLine($"Time: {swCpu.Elapsed.TotalSeconds:F2}s");
-    Console.WriteLine($"Rate: {rateCpu:N0}/s");
-
-    // Summary
-    Console.WriteLine("\n=== Summary ===");
-    Console.WriteLine($"GPU V2:        {rateGpu:N0}/s");
-    Console.WriteLine($"CPU Optimized: {rateCpu:N0}/s");
-    double speedup = rateGpu / rateCpu;
-    Console.WriteLine($"Speedup:       {speedup:F2}x (GPU vs CPU)");
-    
-    if (resultGpu != resultCpu)
-    {
-        Console.WriteLine($"\n*** WARNING: Results differ! GPU={resultGpu}, CPU={resultCpu} ***");
-    }
-    else
-    {
-        Console.WriteLine($"\nResults match: {resultGpu:N0}");
-    }
+    PrintResult(countResult, $"f_all(v={opts.Variables}, l={opts.Literals}, c={opts.Clauses})");
 }
 
 // ==================== Closed-Form Formula (2-SAT only) ====================
+
 void RunFormula(FormulaOptions opts)
 {
-    if (opts.Verify)
-    {
-        Console.WriteLine("????????????????????????????????????????????????????????????????");
-        Console.WriteLine("?  Verifying 2-SAT Closed-Form Formulas                        ?");
-        Console.WriteLine("????????????????????????????????????????????????????????????????");
-        Console.WriteLine();
-        
-        // Known validated values from ValidatedResults.md
-        var knownValues = new Dictionary<(int v, int c), long>
-        {
-            // v=3
-            { (3, 4), 6 },
-            { (3, 5), 36 },
-            { (3, 6), 4 },
-            // v=4  
-            { (4, 5), 144 },
-            { (4, 6), 1008 },
-            { (4, 7), 288 },
-            { (4, 8), 24 },
-            // v=5
-            { (5, 6), 2880 },
-            { (5, 7), 26880 },
-            { (5, 8), 14400 },
-            { (5, 9), 2880 },
-            { (5, 10), 192 },
-            // v=6
-            { (6, 7), 57600 },
-            { (6, 8), 725760 },
-            { (6, 9), 633600 },
-            { (6, 10), 224640 },
-            { (6, 11), 34560 },
-            { (6, 12), 1920 },
-        };
-        
-        Console.WriteLine("Verifying formula against known GPU-computed values:");
-        Console.WriteLine();
-        Console.WriteLine("| v | c | Expected | Formula | Match |");
-        Console.WriteLine("|--:|--:|---------:|--------:|:-----:|");
-        
-        int passed = 0, failed = 0;
-        foreach (var ((v, c), expected) in knownValues.OrderBy(x => x.Key.v).ThenBy(x => x.Key.c))
-        {
-            var computed = MinUnsatClosedFormulaAllVars.Compute(v, c);
-            bool match = computed == expected;
-            string matchStr = match ? "?" : "?";
-            Console.WriteLine($"| {v} | {c} | {expected,8:N0} | {computed,7:N0} | {matchStr} |");
-            if (match) passed++; else failed++;
-        }
-        
-        Console.WriteLine();
-        Console.WriteLine($"Results: {passed} passed, {failed} failed");
-        return;
-    }
+    if (opts.Verify) { RunFormulaVerification(); return; }
 
     if (opts.Variables <= 0 || opts.Clauses <= 0)
-    {
-        Console.WriteLine("Usage: formula -v <variables> -c <clauses>");
-        Console.WriteLine("       formula --verify");
-        Console.WriteLine();
-        Console.WriteLine("Options:");
-        Console.WriteLine("  -v, --variables   Number of variables (2-SAT)");
-        Console.WriteLine("  -c, --clauses     Number of clauses");
-        Console.WriteLine("  -d, --details     Show formula details");
-        Console.WriteLine("  --verify          Verify formulas against known values");
-        return;
-    }
+    { Console.WriteLine("Usage: formula -v <variables> -c <clauses>  |  formula --verify"); return; }
+    if (opts.Variables < 2)
+    { Console.WriteLine("Error: Variables must be at least 2"); return; }
+    if (opts.Clauses < opts.Variables + 1)
+    { Console.WriteLine($"Error: Need at least {opts.Variables + 1} clauses for 2-SAT MIN-UNSAT"); return; }
 
     Console.WriteLine($"Mode: Closed-Form Formula (2-SAT only)");
     Console.WriteLine($"Variables (v): {opts.Variables}");
-    Console.WriteLine($"Clauses (c): {opts.Clauses}");
-    Console.WriteLine();
+    Console.WriteLine($"Clauses (c): {opts.Clauses}\n");
 
-    if (opts.Variables < 2)
-    {
-        Console.WriteLine("Error: Variables must be at least 2");
-        return;
-    }
+    var count = MinUnsatClosedFormulaAllVars.Compute(opts.Variables, opts.Clauses);
 
-    if (opts.Clauses < opts.Variables + 1)
-    {
-        Console.WriteLine($"Error: Need at least {opts.Variables + 1} clauses for 2-SAT MIN-UNSAT");
-        return;
-    }
-
-    // Use BigInteger version for large values, otherwise use long version
-    object count;
-    if (opts.Variables > 12 || opts.Clauses > 20)
-    {
-        count = MinUnsatClosedFormulaAllVars.ComputeBig(opts.Variables, opts.Clauses);
-    }
-    else
-    {
-        count = MinUnsatClosedFormulaAllVars.Compute(opts.Variables, opts.Clauses);
-    }
-    
     Console.WriteLine($"RESULT: f_all(v={opts.Variables}, k=2, c={opts.Clauses}) = {count:N0}");
-    
+
     if (opts.ShowDetails)
     {
         int d = opts.Clauses - opts.Variables;
-        Console.WriteLine();
-        Console.WriteLine($"Details:");
-        Console.WriteLine($"  Diagonal d = c - v = {d}");
-        Console.WriteLine($"  Variables (v) = {opts.Variables}");
-        Console.WriteLine($"  Clauses (c) = {opts.Clauses}");
-        Console.WriteLine($"  Formula type: Diagonal {d}");
-        
-        // Show number of digits for large values
-        string countStr = count.ToString();
-        if (countStr.Length > 15)
-        {
-            Console.WriteLine($"  (Number has {countStr.Length} digits)");
-        }
+        Console.WriteLine($"\nDetails: diagonal d={d}, formula type: Diagonal {d}");
+        string s = count.ToString()!;
+        if (s.Length > 15) Console.WriteLine($"  ({s.Length} digits)");
     }
 }
 
+void RunFormulaVerification()
+{
+    Console.WriteLine("=== Verifying 2-SAT Closed-Form Formulas ===\n");
 
+    Console.WriteLine("| v | c | Expected |  Formula | Match |");
+    Console.WriteLine("|--:|--:|---------:|---------:|:-----:|");
+    int passed = 0, failed = 0;
+    foreach (var (v, c, expected) in KnownValues)
+    {
+        var computed = MinUnsatClosedFormulaAllVars.Compute(v, c);
+        bool ok = computed == expected;
+        Console.WriteLine($"| {v} | {c} | {expected,8:N0} | {computed,8:N0} | {(ok ? "PASS" : "FAIL")} |");
+        if (ok) passed++; else failed++;
+    }
+    Console.WriteLine($"\nResults: {passed} passed, {failed} failed");
+}
+
+// ==================== GPU vs CPU Benchmark ====================
+
+void RunBenchmark(MinUnsatOptions opts)
+{
+    Console.WriteLine($"=== Benchmark: GPU V2 vs CPU Optimized ===\n");
+    Console.WriteLine($"Configuration: v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}\n");
+
+    var (_, totalClauses) = ClauseLiteralMapper.BuildClauseLiteralMap(opts.Variables, opts.Literals);
+    long totalCombinations = CombinationGenerator.CountCombinations(totalClauses, opts.Clauses);
+    Console.WriteLine($"Total combinations: {totalCombinations:N0}\n");
+
+    Console.WriteLine("Warming up...");
+    new CpuMinUnsatCounterOptimized().Count(opts.Variables, opts.Literals, Math.Min(opts.Clauses, 5), verbose: false);
+    using (var warmup = new GpuMinUnsatCounterOptimizedV2(preferGpu: true))
+        warmup.Count(opts.Variables, opts.Literals, Math.Min(opts.Clauses, 5), verbose: false);
+    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+
+    var (resultGpu, rateGpu) = BenchRun("GPU V2", () =>
+    {
+        using var gpu = new GpuMinUnsatCounterOptimizedV2(preferGpu: true);
+        return gpu.Count(opts.Variables, opts.Literals, opts.Clauses, verbose: false);
+    }, totalCombinations);
+
+    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+
+    var (resultCpu, rateCpu) = BenchRun("CPU Optimized", () =>
+        new CpuMinUnsatCounterOptimized().Count(opts.Variables, opts.Literals, opts.Clauses, verbose: false),
+        totalCombinations);
+
+    Console.WriteLine($"\n=== Summary ===");
+    Console.WriteLine($"GPU V2:        {rateGpu:N0}/s");
+    Console.WriteLine($"CPU Optimized: {rateCpu:N0}/s");
+    Console.WriteLine($"Speedup:       {rateGpu / rateCpu:F2}x");
+    Console.WriteLine(resultGpu == resultCpu
+        ? $"\nResults match: {resultGpu:N0}"
+        : $"\n*** WARNING: Results differ! GPU={resultGpu}, CPU={resultCpu} ***");
+}
+
+static (long result, double rate) BenchRun(string name, Func<long> action, long totalCombinations)
+{
+    Console.WriteLine($"\n--- {name} ---");
+    var sw = Stopwatch.StartNew();
+    long result = action();
+    sw.Stop();
+    double rate = totalCombinations / sw.Elapsed.TotalSeconds;
+    Console.WriteLine($"Result: {result:N0}  Time: {sw.Elapsed.TotalSeconds:F2}s  Rate: {rate:N0}/s");
+    return (result, rate);
+}
 
 // ==================== UNSAT Counter ====================
+
 void RunUnsat(UnsatOptions opts, CancellationToken ct)
 {
-    // Verification mode
     if (opts.Verify)
     {
         Console.WriteLine($"=== UNSAT Verification Mode ===");
-        Console.WriteLine($"v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}");
-        Console.WriteLine();
-        
-        // Run simple verifier
+        Console.WriteLine($"v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}\n");
         Console.WriteLine("Running simple verifier (guaranteed correct)...");
-        long verifiedCount = UnsatVerifier.CountSimple(opts.Variables, opts.Literals, opts.Clauses);
-        Console.WriteLine($"\nVerified UNSAT count: {verifiedCount:N0}");
+        Console.WriteLine($"\nVerified UNSAT count: {UnsatVerifier.CountSimple(opts.Variables, opts.Literals, opts.Clauses):N0}");
         return;
     }
-    
+
+    if (opts.Variables < opts.Literals || opts.Variables > 10)
+    { Console.WriteLine($"Error: Variables must be between {opts.Literals} and 10"); return; }
+    if (opts.Literals < 2 || opts.Literals > 3)
+    { Console.WriteLine("Error: Literals per clause must be 2 or 3"); return; }
+    if (opts.Clauses < 1)
+    { Console.WriteLine("Error: Need at least 1 clause"); return; }
+
     string mode = opts.UseCpu ? "CPU" : (opts.Variables > 6 ? "CPU (v>6)" : "GPU");
     Console.WriteLine($"Mode: {mode} UNSAT Counter ({opts.Literals}-SAT)");
     Console.WriteLine($"Variables (v): {opts.Variables}");
     Console.WriteLine($"Literals per clause (l): {opts.Literals}");
     Console.WriteLine($"Clauses (c): {opts.Clauses}");
-    if (!string.IsNullOrEmpty(opts.OutputFile))
-        Console.WriteLine($"Output file: {opts.OutputFile}");
+    if (!string.IsNullOrEmpty(opts.OutputFile)) Console.WriteLine($"Output file: {opts.OutputFile}");
     Console.WriteLine();
-
-    if (opts.Variables < opts.Literals || opts.Variables > 10)
-    {
-        Console.WriteLine($"Error: Variables must be between {opts.Literals} and 10");
-        return;
-    }
-
-    if (opts.Literals < 2 || opts.Literals > 3)
-    {
-        Console.WriteLine("Error: Literals per clause must be 2 or 3");
-        return;
-    }
-
-    if (opts.Clauses < 1)
-    {
-        Console.WriteLine("Error: Need at least 1 clause");
-        return;
-    }
 
     CountingResult countResult;
-
-    // Use CPU for v > 6 (GPU kernel limited to 6 variables)
     if (opts.UseCpu || opts.Variables > 6)
     {
-        var cpuCounter = new CpuUnsatCounterOptimized();
-        countResult = cpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true);
+        var cpu = new CpuUnsatCounterOptimized();
+        countResult = cpu.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true);
     }
     else
     {
-        using var gpuCounter = new GpuUnsatCounterOptimized(preferGpu: true);
-        countResult = gpuCounter.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true);
+        using var gpu = new GpuUnsatCounterOptimized(preferGpu: true);
+        countResult = gpu.CountCancellable(opts.Variables, opts.Literals, opts.Clauses, ct, verbose: true);
     }
 
-    Console.WriteLine();
     if (countResult.WasCancelled)
     {
-        Console.WriteLine($"[Cancelled] Processed: {countResult.ProcessedCombinations:N0} / {countResult.TotalCombinations:N0}");
-        Console.WriteLine($"[Partial] UNSAT count so far: {countResult.Count:N0}");
+        PrintResult(countResult, null);
     }
     else
     {
-        Console.WriteLine($"RESULT: UNSAT(v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}) = {countResult.Count:N0}");
-        
-        // Write results to file if specified
+        Console.WriteLine($"\nRESULT: UNSAT(v={opts.Variables}, l={opts.Literals}, c={opts.Clauses}) = {countResult.Count:N0}");
         if (!string.IsNullOrEmpty(opts.OutputFile))
-        {
             WriteUnsatResultToFile(opts, countResult, mode);
-        }
     }
 }
 
@@ -380,31 +230,41 @@ void WriteUnsatResultToFile(UnsatOptions opts, CountingResult countResult, strin
 {
     try
     {
-        bool fileExists = File.Exists(opts.OutputFile);
-        
-        using var writer = new StreamWriter(opts.OutputFile!, append: true, encoding: System.Text.Encoding.UTF8);
-        
-        // Write header if new file
-        if (!fileExists)
+        bool isNew = !File.Exists(opts.OutputFile);
+        using var w = new StreamWriter(opts.OutputFile!, append: true, encoding: System.Text.Encoding.UTF8);
+        if (isNew)
         {
-            writer.WriteLine("# UNSAT Counting Results");
-            writer.WriteLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            writer.WriteLine("#");
-            writer.WriteLine("# v = variables, l = literals per clause, c = clauses");
-            writer.WriteLine("# UNSAT = count of unsatisfiable formulas");
-            writer.WriteLine("# Combinations = total clause combinations enumerated");
-            writer.WriteLine("#");
-            writer.WriteLine("v,l,c,UNSAT,Combinations,TimeMs,Mode");
+            w.WriteLine("# UNSAT Counting Results");
+            w.WriteLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            w.WriteLine("v,l,c,UNSAT,Combinations,TimeMs,Mode");
         }
-        
-        // Write data row
-        writer.WriteLine($"{opts.Variables},{opts.Literals},{opts.Clauses},{countResult.Count},{countResult.TotalCombinations},{countResult.ElapsedMs},{mode}");
-        
+        w.WriteLine($"{opts.Variables},{opts.Literals},{opts.Clauses},{countResult.Count},{countResult.TotalCombinations},{countResult.ElapsedMs},{mode}");
         Console.WriteLine($"[Saved] Results appended to {opts.OutputFile}");
     }
-    catch (Exception ex)
+    catch (Exception ex) { Console.WriteLine($"[Warning] Failed to write to file: {ex.Message}"); }
+}
+
+// ==================== Shared Helpers ====================
+
+static void PrintHeader(string engine, int literals, int variables, int clauses)
+{
+    Console.WriteLine($"Mode: {engine} ({literals}-SAT)");
+    Console.WriteLine($"Variables (v): {variables}");
+    Console.WriteLine($"Literals per clause (l): {literals}");
+    Console.WriteLine($"Clauses (c): {clauses}\n");
+}
+
+static void PrintResult(CountingResult r, string? label)
+{
+    Console.WriteLine();
+    if (r.WasCancelled)
     {
-        Console.WriteLine($"[Warning] Failed to write to file: {ex.Message}");
+        Console.WriteLine($"[Cancelled] Processed: {r.ProcessedCombinations:N0} / {r.TotalCombinations:N0}");
+        Console.WriteLine($"[Partial] MIN-UNSAT count so far: {r.Count:N0}");
+    }
+    else
+    {
+        Console.WriteLine($"RESULT: {label} = {r.Count:N0}");
     }
 }
 
@@ -413,61 +273,50 @@ void WriteUnsatResultToFile(UnsatOptions opts, CountingResult countResult, strin
 [Verb("minunsat", HelpText = "Count MIN-UNSAT formulas using brute-force enumeration (GPU or CPU).")]
 class MinUnsatOptions
 {
-    [Option('v', "variables", Required = true, HelpText = "Number of variables (all must appear in the formula).")]
+    [Option('v', "variables", Required = true, HelpText = "Number of variables (all must appear).")]
     public int Variables { get; set; }
-
-    [Option('l', "literals", Required = false, Default = 2, HelpText = "Literals per clause: 2 for 2-SAT, 3 for 3-SAT. Default: 2")]
+    [Option('l', "literals", Required = false, Default = 2, HelpText = "Literals per clause: 2 or 3. Default: 2")]
     public int Literals { get; set; }
-
     [Option('c', "clauses", Required = true, HelpText = "Number of clauses.")]
     public int Clauses { get; set; }
-
-    [Option("cpu", Required = false, Default = false, HelpText = "Force CPU mode (uses optimized prefix-caching implementation).")]
+    [Option("cpu", Default = false, HelpText = "Force CPU mode.")]
     public bool UseCpu { get; set; }
-
-    [Option("checkpoint", Required = false, Default = false, HelpText = "Enable checkpoint save/resume for long-running calculations.")]
+    [Option("checkpoint", Default = false, HelpText = "Enable checkpoint save/resume.")]
     public bool UseCheckpoint { get; set; }
-
-    [Option("benchmark", Required = false, Default = false, HelpText = "Run benchmark comparing GPU vs CPU performance.")]
+    [Option("benchmark", Default = false, HelpText = "Run GPU vs CPU benchmark.")]
     public bool Benchmark { get; set; }
+    [Option("v3", Default = false, Hidden = true, HelpText = "(Legacy) V3 is now default for 3-SAT.")]
+    public bool UseV3 { get; set; }
+    [Option('p', "prefix-depth", Default = 0, HelpText = "V3 prefix depth (2 or 3). 0 = auto. 3-SAT only.")]
+    public int PrefixDepth { get; set; }
 }
-
 
 [Verb("formula", HelpText = "Compute MIN-UNSAT count using closed-form formula (2-SAT only, instant).")]
 class FormulaOptions
 {
-    [Option('v', "variables", Required = false, Default = 0, HelpText = "Number of variables (all must appear in the formula).")]
+    [Option('v', "variables", Default = 0, HelpText = "Number of variables.")]
     public int Variables { get; set; }
-
-    [Option('c', "clauses", Required = false, Default = 0, HelpText = "Number of clauses.")]
+    [Option('c', "clauses", Default = 0, HelpText = "Number of clauses.")]
     public int Clauses { get; set; }
-
-    [Option('d', "details", Required = false, Default = false, HelpText = "Show formula details.")]
+    [Option('d', "details", Default = false, HelpText = "Show formula details.")]
     public bool ShowDetails { get; set; }
-
-    [Option("verify", Required = false, Default = false, HelpText = "Verify formulas against known validated values.")]
+    [Option("verify", Default = false, HelpText = "Verify formulas against known values.")]
     public bool Verify { get; set; }
 }
 
-
-[Verb("unsat", HelpText = "Count UNSAT formulas (not MIN-UNSAT) for 2-SAT.")]
+[Verb("unsat", HelpText = "Count UNSAT formulas (not MIN-UNSAT).")]
 class UnsatOptions
 {
     [Option('v', "variables", Required = true, HelpText = "Number of variables.")]
     public int Variables { get; set; }
-
-    [Option('l', "literals", Required = false, Default = 2, HelpText = "Literals per clause: 2 for 2-SAT, 3 for 3-SAT. Default: 2")]
+    [Option('l', "literals", Default = 2, HelpText = "Literals per clause: 2 or 3. Default: 2")]
     public int Literals { get; set; }
-
     [Option('c', "clauses", Required = true, HelpText = "Number of clauses.")]
     public int Clauses { get; set; }
-
-    [Option("cpu", Required = false, Default = false, HelpText = "Force CPU mode instead of GPU.")]
+    [Option("cpu", Default = false, HelpText = "Force CPU mode.")]
     public bool UseCpu { get; set; }
-
-    [Option("verify", Required = false, Default = false, HelpText = "Use simple verifier to get correct count (slow but guaranteed correct).")]
+    [Option("verify", Default = false, HelpText = "Use simple verifier (slow but correct).")]
     public bool Verify { get; set; }
-
-    [Option('o', "output", Required = false, Default = null, HelpText = "Output file to append results (CSV format).")]
+    [Option('o', "output", Default = null, HelpText = "Output CSV file to append results.")]
     public string? OutputFile { get; set; }
 }

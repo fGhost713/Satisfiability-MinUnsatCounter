@@ -16,57 +16,19 @@ public static class MinUnsatClosedFormulaAllVars
     #region Public API
 
     /// <summary>
-    /// Compute MIN-UNSAT count for AllVars=true mode.
+    /// Compute MIN-UNSAT count for AllVars=true mode using BigInteger for arbitrary precision.
     /// f(v, c) = m(c, v) where m is the multiplier from the general formula.
     /// </summary>
-    public static long Compute(int numVariables, int numClauses)
+    public static BigInteger Compute(int numVariables, int numClauses)
     {
         if (numClauses < 4) return 0;
         if (numVariables < 2) return 0;
-        
-        // For AllVars=true, we need exactly v variables
-        if (numVariables == 2 && numClauses != 4) return 0;
-        if (numVariables > 2 && numClauses < numVariables + 1) return 0;
-        
-        return ComputeMultiplier(numClauses, numVariables);
-    }
 
-    /// <summary>
-    /// Compute MIN-UNSAT count using BigInteger for arbitrary precision.
-    /// Supports large values of v and c that would overflow long.
-    /// Mirrors the same dispatch logic as Compute/ComputeMultiplier.
-    /// </summary>
-    public static BigInteger ComputeBig(int numVariables, int numClauses)
-    {
-        if (numClauses < 4) return 0;
-        if (numVariables < 2) return 0;
-        
         if (numVariables == 2 && numClauses != 4) return 0;
         if (numVariables > 2 && numClauses < numVariables + 1) return 0;
-        
+
         int c = numClauses;
         int k = numVariables;
-        int d = c - k;
-        if (d < 1) return 0;
-        
-        return d switch
-        {
-            1 => ComputeM_Diagonal1_Big(c),
-            2 => ComputeM_Diagonal2_Big(c),
-            3 => ComputeM_Diagonal3_Big(c),
-            _ => ComputeM_General_Big(c, k)
-        };
-    }
-
-    #endregion
-
-    #region Multiplier Computation (long version)
-
-    /// <summary>
-    /// Computes the multiplier m(c,k) using closed-form formulas.
-    /// </summary>
-    private static long ComputeMultiplier(int c, int k)
-    {
         int d = c - k;
         if (d < 1) return 0;
 
@@ -79,302 +41,21 @@ public static class MinUnsatClosedFormulaAllVars
         };
     }
 
+    #endregion
+
+    #region Multiplier Computation
+
     /// <summary>
     /// m(c,c-1) = (c-1)! × (c-2) × (c-3) × 2^(c-5)
     /// </summary>
-    private static long ComputeM_Diagonal1(int c)
+    private static BigInteger ComputeM_Diagonal1(int c)
     {
         if (c < 4) return 0;
-        
-        long factorial = Factorial(c - 1);
-        long product = (long)(c - 2) * (c - 3);
-        int power = c - 5;
-        
-        if (power < 0)
-            return factorial * product >> (-power);
-        
-        return factorial * product * (1L << power);
-    }
 
-    /// <summary>
-    /// m(c,c-2) computed from N(c,c-2,u) values.
-    /// </summary>
-    private static long ComputeM_Diagonal2(int c)
-    {
-        if (c < 4) return 0;
-        
-        long n0 = ComputeN_Diagonal2_u0(c);
-        long n2 = ComputeN_Diagonal2_u2(c);
-        long n4 = ComputeN_Diagonal2_u4(c);
-        
-        return n0 + 4 * n2 + 16 * n4;
-    }
-
-    /// <summary>
-    /// m(c,c-3) computed from N(c,c-3,u) values.
-    /// </summary>
-    private static long ComputeM_Diagonal3(int c)
-    {
-        if (c < 6) return 0;
-
-        long n0 = ComputeN_Diagonal3_u0(c);
-        long n2 = ComputeN_Diagonal3_u2(c);
-        long n4 = ComputeN_Diagonal3_u4(c);
-        long n6 = ComputeN_Diagonal3_u6(c);
-
-        return n0 + 4 * n2 + 16 * n4 + 64 * n6;
-    }
-
-    /// <summary>
-    /// General formula for d >= 4.
-    /// </summary>
-    private static long ComputeM_General(int c, int k)
-    {
-        int d = c - k;
-        if (d < 2) return 0;
-        
-        long n0 = ComputeN_General(c, d, 0);
-        long n2 = ComputeN_General(c, d, 2);
-        long n4 = ComputeN_General(c, d, 4);
-        
-        return n0 + 4 * n2 + 16 * n4;
-    }
-
-    #endregion
-
-    #region N(c,k,u) Diagonal Formulas (long version)
-
-    private static long ComputeN_Diagonal2_u0(int c)
-    {
-        if (c < 4) return 0;
-        long factorial = Factorial(c - 2);
-        long binomial = Binomial(c - 1, 3);
-        return Shift(factorial * binomial, c - 5);
-    }
-
-    private static long ComputeN_Diagonal2_u2(int c)
-    {
-        long factorial = Factorial(c - 2);
-        long binomial = Binomial(c - 1, 4);
-        return Shift(factorial * binomial, c - 6);
-    }
-
-    private static long ComputeN_Diagonal2_u4(int c)
-    {
-        long factorial = Factorial(c - 2);
-        long binomial = Binomial(c - 1, 5);
-        return Shift(factorial * binomial, c - 9);
-    }
-
-    private static long ComputeN_Diagonal3_u0(int c)
-    {
-        long factorial = Factorial(c - 3);
-        long binomial = Binomial(c - 1, 5);
-        return Shift(factorial * binomial, c - 5) / 3;
-    }
-
-    private static long ComputeN_Diagonal3_u2(int c)
-    {
-        long factorial = Factorial(c - 3);
-        long binomial = Binomial(c - 1, 6);
-        return Shift(factorial * binomial, c - 7);
-    }
-
-    private static long ComputeN_Diagonal3_u4(int c)
-    {
-        long factorial = Factorial(c - 3);
-        long binomial = Binomial(c - 1, 7);
-        return Shift(factorial * binomial, c - 9);
-    }
-
-    private static long ComputeN_Diagonal3_u6(int c)
-    {
-        long factorial = Factorial(c - 3);
-        long binomial = Binomial(c - 1, 8);
-        return Shift(factorial * binomial, c - 11) / 3;
-    }
-
-    /// <summary>
-    /// Computes N(c, c-d, u) using the discovered patterns.
-    /// </summary>
-    private static long ComputeN_General(int c, int d, int u)
-    {
-        if (d < 2) return 0;
-        
-        long termFact = Factorial(c - d);
-        int binomK = 2 * d - 1 + u / 2;
-        long termBinom = Binomial(c - 1, binomK);
-        
-        if (termFact == 0 || termBinom == 0) return 0;
-        
-        long numA = 1;
-        long denA = 1;
-        int B = 0;
-        
-        bool isPowerOf2 = (d & (d - 1)) == 0;
-        
-        if (u == 0)
-        {
-            if (isPowerOf2)
-            {
-                numA = 1;
-                denA = 1;
-                B = (3 * d) / 2 + 2;
-            }
-            else
-            {
-                numA = 1;
-                denA = d;
-                B = d + 2;
-            }
-        }
-        else if (u == 2)
-        {
-            numA = 1;
-            denA = 1;
-            B = d + 4;
-        }
-        else if (u == 4)
-        {
-            if (isPowerOf2)
-            {
-                numA = 3;
-                denA = 1;
-                B = d + 7;
-            }
-            else
-            {
-                numA = 1;
-                denA = 1;
-                B = d + 6;
-            }
-        }
-        else
-        {
-            return 0;
-        }
-        
-        int power = c - B;
-        BigInteger bigResult = (BigInteger)termFact * termBinom * numA;
-        
-        if (power >= 0)
-            bigResult <<= power;
-        else
-            bigResult >>= (-power);
-            
-        bigResult /= denA;
-        
-        return (long)bigResult;
-    }
-
-    #endregion
-
-    #region BigInteger N(c,k,u) Computation
-
-    /// <summary>
-    /// Compute N(c, c-d, u) using BigInteger for arbitrary precision.
-    /// </summary>
-    private static BigInteger ComputeN_Big(int c, int d, int u)
-    {
-        if (d < 1) return 0;
-        
-        int k = c - d;
-        BigInteger termFact = FactorialBig(k);
-        int binomK = 2 * d - 1 + u / 2;
-        BigInteger termBinom = BinomialBig(c - 1, binomK);
-        
-        if (termFact == 0 || termBinom == 0) return 0;
-        
-        BigInteger numA = 1;
-        BigInteger denA = 1;
-        int B = 0;
-        
-        bool isPowerOf2 = d > 0 && (d & (d - 1)) == 0;
-        
-        if (u == 0)
-        {
-            if (d == 1)
-            {
-                numA = c - 3;
-                denA = 1;
-                B = 4;
-            }
-            else if (isPowerOf2)
-            {
-                numA = 1;
-                denA = 1;
-                B = (3 * d) / 2 + 2;
-            }
-            else
-            {
-                numA = 1;
-                denA = d;
-                B = d + 2;
-            }
-        }
-        else if (u == 2)
-        {
-            if (d == 1)
-            {
-                numA = 1;
-                denA = 1;
-                B = 7;
-            }
-            else
-            {
-                numA = 1;
-                denA = 1;
-                B = d + 4;
-            }
-        }
-        else if (u == 4)
-        {
-            if (isPowerOf2)
-            {
-                numA = 3;
-                denA = 1;
-                B = d + 7;
-            }
-            else
-            {
-                numA = 1;
-                denA = 1;
-                B = d + 6;
-            }
-        }
-        else
-        {
-            return 0;
-        }
-        
-        int power = c - B;
-        BigInteger bigResult = termFact * termBinom * numA;
-        
-        if (power >= 0)
-            bigResult <<= power;
-        else
-            bigResult >>= (-power);
-            
-        bigResult /= denA;
-        
-        return bigResult;
-    }
-
-    #endregion
-
-    #region BigInteger Diagonal Formulas
-
-    /// <summary>
-    /// m(c,c-1) = (c-1)! × (c-2) × (c-3) × 2^(c-5)  [BigInteger version]
-    /// </summary>
-    private static BigInteger ComputeM_Diagonal1_Big(int c)
-    {
-        if (c < 4) return 0;
-        
-        BigInteger factorial = FactorialBig(c - 1);
+        BigInteger factorial = Factorial(c - 1);
         BigInteger product = (BigInteger)(c - 2) * (c - 3);
         int power = c - 5;
-        
+
         BigInteger result = factorial * product;
         if (power >= 0)
             result <<= power;
@@ -384,134 +65,196 @@ public static class MinUnsatClosedFormulaAllVars
     }
 
     /// <summary>
-    /// m(c,c-2) = N(c,c-2,0) + 4·N(c,c-2,2) + 16·N(c,c-2,4)  [BigInteger version]
+    /// m(c,c-2) = N(c,c-2,0) + 4·N(c,c-2,2) + 16·N(c,c-2,4)
     /// </summary>
-    private static BigInteger ComputeM_Diagonal2_Big(int c)
+    private static BigInteger ComputeM_Diagonal2(int c)
     {
         if (c < 4) return 0;
-        
-        BigInteger n0 = ComputeN_Diagonal2_Big(c, 0);
-        BigInteger n2 = ComputeN_Diagonal2_Big(c, 2);
-        BigInteger n4 = ComputeN_Diagonal2_Big(c, 4);
-        
+
+        BigInteger n0 = ComputeN_Diagonal2(c, 0);
+        BigInteger n2 = ComputeN_Diagonal2(c, 2);
+        BigInteger n4 = ComputeN_Diagonal2(c, 4);
+
         return n0 + 4 * n2 + 16 * n4;
     }
 
-    private static BigInteger ComputeN_Diagonal2_Big(int c, int u)
+    private static BigInteger ComputeN_Diagonal2(int c, int u)
     {
-        BigInteger factorial = FactorialBig(c - 2);
+        BigInteger factorial = Factorial(c - 2);
         return u switch
         {
-            0 => ShiftBig(factorial * BinomialBig(c - 1, 3), c - 5),
-            2 => ShiftBig(factorial * BinomialBig(c - 1, 4), c - 6),
-            4 => ShiftBig(factorial * BinomialBig(c - 1, 5), c - 9),
+            0 => Shift(factorial * Binomial(c - 1, 3), c - 5),
+            2 => Shift(factorial * Binomial(c - 1, 4), c - 6),
+            4 => Shift(factorial * Binomial(c - 1, 5), c - 9),
             _ => 0
         };
     }
 
     /// <summary>
-    /// m(c,c-3) = N(c,c-3,0) + 4·N(c,c-3,2) + 16·N(c,c-3,4) + 64·N(c,c-3,6)  [BigInteger version]
+    /// m(c,c-3) = N(c,c-3,0) + 4·N(c,c-3,2) + 16·N(c,c-3,4) + 64·N(c,c-3,6)
     /// </summary>
-    private static BigInteger ComputeM_Diagonal3_Big(int c)
+    private static BigInteger ComputeM_Diagonal3(int c)
     {
         if (c < 6) return 0;
-        
-        BigInteger n0 = ComputeN_Diagonal3_Big(c, 0);
-        BigInteger n2 = ComputeN_Diagonal3_Big(c, 2);
-        BigInteger n4 = ComputeN_Diagonal3_Big(c, 4);
-        BigInteger n6 = ComputeN_Diagonal3_Big(c, 6);
-        
+
+        BigInteger n0 = ComputeN_Diagonal3(c, 0);
+        BigInteger n2 = ComputeN_Diagonal3(c, 2);
+        BigInteger n4 = ComputeN_Diagonal3(c, 4);
+        BigInteger n6 = ComputeN_Diagonal3(c, 6);
+
         return n0 + 4 * n2 + 16 * n4 + 64 * n6;
     }
 
-    private static BigInteger ComputeN_Diagonal3_Big(int c, int u)
+    private static BigInteger ComputeN_Diagonal3(int c, int u)
     {
-        BigInteger factorial = FactorialBig(c - 3);
+        BigInteger factorial = Factorial(c - 3);
         return u switch
         {
-            0 => ShiftBig(factorial * BinomialBig(c - 1, 5), c - 5) / 3,
-            2 => ShiftBig(factorial * BinomialBig(c - 1, 6), c - 7),
-            4 => ShiftBig(factorial * BinomialBig(c - 1, 7), c - 9),
-            6 => ShiftBig(factorial * BinomialBig(c - 1, 8), c - 11) / 3,
+            0 => Shift(factorial * Binomial(c - 1, 5), c - 5) / 3,
+            2 => Shift(factorial * Binomial(c - 1, 6), c - 7),
+            4 => Shift(factorial * Binomial(c - 1, 7), c - 9),
+            6 => Shift(factorial * Binomial(c - 1, 8), c - 11) / 3,
             _ => 0
         };
     }
 
     /// <summary>
-    /// General formula for d >= 4.  [BigInteger version]
+    /// General formula for d >= 4.
+    /// Dynamically sums over all even u values until the binomial term becomes zero.
     /// </summary>
-    private static BigInteger ComputeM_General_Big(int c, int k)
+    private static BigInteger ComputeM_General(int c, int k)
     {
         int d = c - k;
         if (d < 2) return 0;
-        
-        BigInteger n0 = ComputeN_Big(c, d, 0);
-        BigInteger n2 = ComputeN_Big(c, d, 2);
-        BigInteger n4 = ComputeN_Big(c, d, 4);
-        
-        return n0 + 4 * n2 + 16 * n4;
+
+        BigInteger result = 0;
+        BigInteger multiplier = 1;
+        for (int u = 0; ; u += 2)
+        {
+            int binomK = 2 * d - 1 + u / 2;
+            if (binomK > c - 1) break;
+
+            BigInteger nu = ComputeN(c, d, u);
+            if (nu > 0)
+                result += multiplier * nu;
+
+            multiplier *= 4;
+        }
+
+        return result;
     }
 
-    private static BigInteger ShiftBig(BigInteger val, int shift)
+    #endregion
+
+    #region N(c,k,u) Computation
+
+    /// <summary>
+    /// Compute N(c, c-d, u) using Burnside's lemma for the A coefficient.
+    /// Theorem: Exactly d+1 nonzero terms exist (j = u/2 ranges from 0 to d).
+    /// A(d,j) = C(d,j)/d for non-pow2 d (Burnside over Z_d).
+    /// A(d,j) = [C(d,j)+(d-1)*C(d/2,j/2)]/d for pow2 d, even j (Burnside over (Z_2)^m).
+    /// A(d,j) is symmetric: A(d,j) = A(d,d-j).
+    /// </summary>
+    private static BigInteger ComputeN(int c, int d, int u)
     {
-        if (shift >= 0) return val << shift;
-        return val >> (-shift);
+        if (d < 1) return 0;
+
+        int j = u / 2;
+        if (j > d) return 0; // Theorem: exactly d+1 nonzero terms
+
+        int k = c - d;
+        BigInteger termFact = Factorial(k);
+        int binomK = 2 * d - 1 + j;
+        BigInteger termBinom = Binomial(c - 1, binomK);
+
+        if (termFact == 0 || termBinom == 0) return 0;
+
+        BigInteger numA;
+        BigInteger denA;
+        int B;
+
+        bool isPowerOf2 = d > 0 && (d & (d - 1)) == 0;
+
+        if (d == 1)
+        {
+            // Boundary case: d=1 uses polynomial A, only u=0 term
+            if (u != 0) return 0;
+            numA = c - 3;
+            denA = 1;
+            B = 4;
+        }
+        else
+        {
+            // Burnside A coefficient
+            denA = d;
+            if (isPowerOf2 && (j % 2 == 0))
+                numA = Binomial(d, j) + (d - 1) * Binomial(d / 2, j / 2);
+            else
+                numA = Binomial(d, j);
+
+            // B offset
+            if (!isPowerOf2)
+            {
+                B = d + 2 * j + 2;
+            }
+            else if (j == 0)
+            {
+                B = (3 * d) / 2 + 2;
+            }
+            else if (j % 2 == 1)
+            {
+                B = d + 2 * j + 2;
+            }
+            else
+            {
+                B = d + 2 * j + 3;
+            }
+        }
+
+        int power = c - B;
+        BigInteger bigResult = termFact * termBinom * numA;
+
+        if (power >= 0)
+            bigResult <<= power;
+        else
+            bigResult >>= (-power);
+
+        bigResult /= denA;
+
+        return bigResult;
     }
 
     #endregion
 
     #region Math Helpers
 
-    private static long Factorial(int n)
+    private static BigInteger Factorial(int n)
     {
         if (n < 0) return 0;
         if (n <= 1) return 1;
-        
-        long result = 1;
+
+        BigInteger result = 1;
         for (int i = 2; i <= n; i++)
             result *= i;
         return result;
     }
 
-    private static long Binomial(int n, int k)
+    private static BigInteger Binomial(int n, int k)
     {
         if (k > n || k < 0) return 0;
         if (k == 0 || k == n) return 1;
         if (k > n - k) k = n - k;
-        
-        long result = 1;
+
+        BigInteger result = 1;
         for (int i = 0; i < k; i++)
             result = result * (n - i) / (i + 1);
         return result;
     }
-    
-    private static long Shift(long val, int shift)
+
+    private static BigInteger Shift(BigInteger val, int shift)
     {
         if (shift >= 0) return val << shift;
         return val >> (-shift);
-    }
-
-    private static BigInteger FactorialBig(int n)
-    {
-        if (n < 0) return 0;
-        if (n <= 1) return 1;
-        
-        BigInteger result = 1;
-        for (int i = 2; i <= n; i++)
-            result *= i;
-        return result;
-    }
-
-    private static BigInteger BinomialBig(int n, int k)
-    {
-        if (k > n || k < 0) return 0;
-        if (k == 0 || k == n) return 1;
-        if (k > n - k) k = n - k;
-        
-        BigInteger result = 1;
-        for (int i = 0; i < k; i++)
-            result = result * (n - i) / (i + 1);
-        return result;
     }
 
     #endregion

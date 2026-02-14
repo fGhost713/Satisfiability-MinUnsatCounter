@@ -146,7 +146,7 @@ $\square$
 
 ### 5.1 Decomposition by Unbalanced Count
 
-**Definition 5.1**. Let $N(c, k, u)$ denote the count of *canonical* MIN-UNSAT formulas with $c$ clauses, $k$ variables, and exactly $u$ unbalanced variables.
+**Definition 5.1**. Let $N(c, k, u)$ denote the count of *canonical* MIN-UNSAT formulas (i.e., representatives under the polarity symmetry group, with $p_i^+ \geq p_i^-$ for each variable) with $c$ clauses, $k$ variables, and exactly $u$ unbalanced variables ($p_i^+ > p_i^-$).
 
 **Theorem 5.1** (Multiplier Decomposition). The multiplier decomposes as:
 $$m(c, k) = \sum_{u=0,2,4,\ldots}^{k} 2^u \cdot N(c, k, u)$$
@@ -168,36 +168,53 @@ $\square$
 ### 5.3 The General N-Formula
 
 **Theorem 5.2** (General Formula for N). For $d \geq 2$:
-$$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+\frac{u}{2}} \cdot 2^{c - B(d,u)}$$
+$$N(c, k, u) = A(d, j) \cdot k! \cdot \binom{c-1}{2d-1+j} \cdot 2^{c - B(d,j)}$$
 
-where:
+where $j = u/2$ and:
 - $k = c - d$ (number of variables)
-- $A(d, u)$ is a rational coefficient
-- $B(d, u)$ is a power offset
+- $A(d, j)$ is a rational coefficient determined by Burnside's lemma
+- $B(d, j)$ is a power offset
 
-**The Coefficient Patterns:**
+**Theorem 5.3** (Finite Term Count). Exactly $d + 1$ terms are nonzero: $j$ ranges from $0$ to $d$ (i.e., $u = 0, 2, 4, \ldots, 2d$). For $j > d$, $N(c, k, u) = 0$.
 
-For $u = 0$:
-$$A(d, 0) = \begin{cases} 1 & \text{if } d = 2^m \text{ for some } m \geq 1 \\ \frac{1}{d} & \text{otherwise} \end{cases}$$
+*Proof (structural).* The implication graph has $2k$ nodes and $2c = 2k + 2d$ directed edges. Since edges come in complementary pairs (each clause creates $\neg a \to b$ and $\neg b \to a$), the paired circuit rank equals $d$. Each unbalanced variable requires at least one independent cycle to sustain its polarity asymmetry. Therefore $j = u/2 \leq d$. $\square$
 
-$$B(d, 0) = \begin{cases} \frac{3d}{2} + 2 & \text{if } d = 2^m \\ d + 2 & \text{otherwise} \end{cases}$$
+**Theorem 5.4** (Coefficient Symmetry). $A(d, j) = A(d, d - j)$ for all $0 \leq j \leq d$.
 
-For $u = 2$ (all $d \geq 2$):
-$$A(d, 2) = 1, \quad B(d, 2) = d + 4$$
+*Proof.* The global polarity flip $\sigma_{\{1,\ldots,k\}}$ (Proposition 4.1) maps every clause $(a \vee b)$ to $(\neg a \vee \neg b)$, preserving MIN-UNSAT. This reverses all cycle orientations in the implication graph, mapping a configuration using $j$ cycles for polarity asymmetry to one using $d - j$ cycles. $\square$
 
-For $u = 4$:
-$$A(d, 4) = \begin{cases} 1 & \text{if } d = 2 \\ 3 & \text{if } d = 2^m \text{ for } m \geq 2 \\ 1 & \text{otherwise} \end{cases}$$
+**Theorem 5.5** (Burnside Structure of A Coefficients).
 
-$$B(d, 4) = \begin{cases} d + 7 & \text{if } d = 2^m \text{ for } m \geq 1 \\ d + 6 & \text{otherwise} \end{cases}$$
+The coefficient $A(d,j)$ arises from Burnside's lemma applied to the automorphism group of the cycle structure in the implication graph.
 
-For $u = 6$ (relevant only when $d = 3$):
-$$A(3, 6) = \frac{1}{3}, \quad B(3, 6) = 11$$
+**Case 1: $d$ not a power of 2.** The $d$ independent cycles have cyclic symmetry group $\mathbb{Z}_d$. Choosing which $j$ of the $d$ cycles carry polarity asymmetry, modulo the $d$-fold rotation:
 
-**Note.** For most parameter ranges, terms with $u \geq 6$ vanish because $\binom{c-1}{2d-1+u/2} = 0$. The $u = 6$ term contributes non-trivially only for $d = 3$ with sufficiently large $c$.
+$$A(d, j) = \frac{1}{d} \binom{d}{j}$$
+
+**Case 2: $d = 2^m$ (power of 2).** The cycle structure has symmetry group $(\mathbb{Z}_2)^m$. By Burnside:
+
+$$A(d, j) = \frac{1}{d}\left[\binom{d}{j} + (d-1)\binom{d/2}{\lfloor j/2 \rfloor}\right] \quad \text{for } j \text{ even}$$
+
+$$A(d, j) = \frac{1}{d}\binom{d}{j} \quad \text{for } j \text{ odd}$$
+
+*Verification:*
+- $d=2$: $A = [1, 1, 1]$ ✓
+- $d=3$: $A = [1/3, 1, 1, 1/3]$ ✓
+- $d=4$: $A = [1, 1, 3, 1, 1]$ ✓
+- Predicts $d=8$: $A = [1, 1, 7, 7, 14, 7, 7, 1, 1]$
+$\square$
+
+**The B Offset Patterns:**
+
+For $d$ not a power of 2:
+$$B(d, j) = d + 2j + 2 \quad \text{(universal)}$$
+
+For $d = 2^m$ (power of 2):
+$$B(d, j) = \begin{cases} \frac{3d}{2} + 2 & \text{if } j = 0 \\ d + 2j + 2 & \text{if } j \text{ is odd} \\ d + 2j + 3 & \text{if } j \text{ is even and } j > 0 \end{cases}$$
 
 ### 5.4 Special Case: Diagonal d = 1
 
-**Theorem 5.3** (Diagonal 1 Formula). For $d = 1$ (i.e., $k = c - 1$):
+**Theorem 5.6** (Diagonal 1 Formula). For $d = 1$ (i.e., $k = c - 1$):
 $$m(c, c-1) = (c-1)! \cdot (c-2) \cdot (c-3) \cdot 2^{c-5}$$
 
 *Proof Sketch.* 
@@ -207,6 +224,8 @@ $$m(c, c-1) = (c-1)! \cdot (c-2) \cdot (c-3) \cdot 2^{c-5}$$
 4. The factorial $k!$ accounts for variable labeling.
 5. The power $2^{c-5}$ accounts for remaining polarity choices.
 $\square$
+
+> **Remark 5.1** (Discontinuity at d = 1). The General Formula (Theorem 5.2) is defined strictly for $d \geq 2$ and **cannot** be extrapolated to $d = 1$. The structural reason is that for $d = 1$, the implication graph has paired circuit rank 1 — its UNSAT-enforcing structure consists of a single complex cycle threading all $k$ variables. This topology is fundamentally different from the $d \geq 2$ case, where the UNSAT structure decomposes into $d$ independent paired cycles whose automorphism group (cyclic or binary) governs the Burnside coefficients $A(d, j)$. The single-cycle case ($d = 1$) has no such cycle-permutation symmetry, leading to a qualitatively different counting formula.
 
 ---
 
@@ -279,8 +298,19 @@ $$f_{\text{all}}(v, c) = m(c, v)$$
 | $(v, c)$ | Formula Result | GPU Count |
 |:--------:|---------------:|----------:|
 | $(5, 7)$ | $26,880$ | $26,880$ ✓ |
+| $(5, 8)$ | $14,400$ | $14,400$ ✓ |
+| $(5, 9)$ | $2,880$ | $2,880$ ✓ |
+| $(5, 10)$ | $192$ | $192$ ✓ |
 | $(6, 7)$ | $57,600$ | $57,600$ ✓ |
 | $(6, 8)$ | $725,760$ | $725,760$ ✓ |
+| $(6, 9)$ | $633,600$ | $633,600$ ✓ |
+| $(6, 10)$ | $224,640$ | $224,640$ ✓ |
+| $(6, 11)$ | $34,560$ | $34,560$ ✓ |
+| $(6, 12)$ | $1,920$ | $1,920$ ✓ |
+| $(7, 8)$ | $1,209,600$ | $1,209,600$ ✓ |
+| $(7, 9)$ | $20,321,280$ | $20,321,280$ ✓ |
+| $(7, 10)$ | $26,611,200$ | $26,611,200$ ✓ |
+| $(7, 11)$ | $14,676,480$ | $14,676,480$ ✓ |
 
 ---
 

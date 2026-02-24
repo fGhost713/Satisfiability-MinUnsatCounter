@@ -1,8 +1,9 @@
-﻿# Mathematical Proof: Counting MIN-UNSAT 2-SAT Formulas
+﻿# Closed-Form Conjecture: Counting MIN-UNSAT 2-SAT Formulas
 
-> **Document Type:** Formal Mathematical Proof  
+> **Document Type:** Partially-proven conjecture  
 > **Subject:** Closed-form formula for counting minimal unsatisfiable 2-SAT formulas  
-> **Prerequisites:** Basic combinatorics, Boolean satisfiability, group theory (symmetry)
+> **Prerequisites:** Basic combinatorics, Boolean satisfiability, group theory (symmetry)  
+> **Status:** Proven for prime and power-of-2 diagonals $d$; verified across 30 GPU data points; open question at composite non-power-of-2 $d$
 
 ---
 
@@ -316,20 +317,22 @@ $$f_{\text{all}}(v, c) = m(c, v)$$
 
 ## 9. Conclusion
 
-We have established a complete closed-form formula for counting MIN-UNSAT 2-SAT formulas. The formula exhibits elegant structure:
+We have presented a closed-form formula for counting MIN-UNSAT 2-SAT formulas, proven for prime and power-of-2 diagonal parameters $d$, and verified by GPU computation across 30 data points ($v = 2$ through $8$). The formula exhibits elegant structure:
 
 1. **Polynomial in $v$**: Through the binomial decomposition $\sum \binom{v}{k} \cdot m(c,k)$
 2. **Factorial growth in $k$**: Through the $k!$ term in each $N(c,k,u)$
 3. **Exponential in $c$**: Through the $2^{c-B(d,u)}$ power terms
 4. **Symmetry exploitation**: Through the orbit-counting with unbalanced variables
 
-The proof combines:
+The derivation combines:
 - Boolean satisfiability theory (UNSAT characterization)
 - Combinatorics (binomial coefficients, factorials)
 - Group theory (polarity symmetry, orbit-stabilizer)
 - Structural analysis (implication graphs, unique coverage)
 
-$\blacksquare$
+**Open question:** For composite non-power-of-2 $d$ (first at $d = 6$), the A coefficient $\frac{1}{d}\binom{d}{j}$ for $j \geq 1$ has not been independently tested against GPU data. Verification requires computation at $v \geq 8$, $c \geq 14$.
+
+See `CLOSED_FORM_CONJECTURE_2SAT_MINUNSAT_DETAILED.md` for the complete analysis with detailed examples and proof status.
 
 ---
 
@@ -341,4 +344,5 @@ $\blacksquare$
 
 ---
 
-*Document generated: 2026 by Sascha with help from Copilot*
+*Document generated: 2026 by Sascha with help from Copilot*  
+*Status: Partially-proven conjecture — see CLOSED_FORM_CONJECTURE_2SAT_MINUNSAT_DETAILED.md for full proof status table*

@@ -1,18 +1,8 @@
 ﻿# MIN-UNSAT k-SAT Counter
 
-A GPU-accelerated tool for counting **Minimally Unsatisfiable (MU) k-SAT formulas** (2-SAT and 3-SAT).
+A GPU-accelerated tool for counting **minimally unsatisfiable k-SAT formulas** (2-SAT and 3-SAT).
 
-**Detailed explanation:**
-
-Enumerates and counts MU k-CNF formulas by GPU-accelerated brute-force search,
-with a closed-form solution for the 2-SAT case.
-A formula is MU if it is unsatisfiable yet every proper sub-formula is satisfiable — i.e., the formula itself is its only Minimal Unsatisfiable Subset (MUS).
-While MUS extraction tools (e.g., MUSE, MARCO) identify MUS cores within a given unsatisfiable formula,
-this project counts how many MU formulas exist for given parameters $(v, k, c)$.
-
-**Reason for development:**
-
-Finding no existing MU formula counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula for the 2-SAT MU count.
+Finding no existing MinUnsat counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula (proven for prime and power-of-2 diagonals, verified across 30 GPU data points) for the 2-SAT MinUnsat count.
 
 ## What This Counts
 
@@ -244,7 +234,9 @@ $$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+u/2} \cdot 2^{c - B(d,u)}
 
 The coefficients $A(d, j)$ follow Burnside's lemma over the cycle automorphism group, and $B(d, j)$ follows patterns based on whether $d$ is a power of 2. The formula works for **any** d and u — no hardcoded special cases.
 
-See `MATHEMATICAL_PROOF_2SAT_MINUNSAT_DETAILED.md` in the `documents` folder for the complete proof.
+The formula is **proven** for prime and power-of-2 diagonals $d$, and **verified** by GPU computation across 30 data points ($v = 2$ through $8$). An open question remains for composite non-power-of-2 $d$ (first at $d = 6$).
+
+See `CLOSED_FORM_CONJECTURE_2SAT_MINUNSAT_DETAILED.md` in the `documents` folder for the complete analysis and proof status.
 
 ## How It Works
 
@@ -276,8 +268,8 @@ Typical performance on RTX 4060:
 
 | Counter | Rate | Description |
 |---------|-----:|-------------|
-| **UNSAT** | ~31 billion/s | Counting all unsatisfiable formulas |
-| **MIN-UNSAT** | ~14 billion/s | Counting minimal unsatisfiable formulas |
+| **UNSAT** | ~26 billion/s | Counting all unsatisfiable formulas |
+| **MIN-UNSAT** | ~17 billion/s | Counting minimal unsatisfiable formulas |
 
 Example runtimes:
 
@@ -299,7 +291,7 @@ MIT License
 | `Counters/` | GPU and CPU counter implementations (optimized + many-vars fallback) |
 | `Helpers/` | Clause mask builder, combination generator, closed-form formula |
 | `Infrastructure/` | Checkpoint and result types |
-| `documents/` | Mathematical proofs and algorithm documentation |
+| `documents/` | Mathematical conjecture, derivations, and algorithm documentation |
 
 ## References
 

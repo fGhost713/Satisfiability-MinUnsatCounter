@@ -2,7 +2,17 @@
 
 A GPU-accelerated tool for counting **minimally unsatisfiable k-SAT formulas** (2-SAT and 3-SAT).
 
-Finding no existing MinUnsat counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula (proven for prime and power-of-2 diagonals, verified across 30 GPU data points) for the 2-SAT MinUnsat count.
+Finding no existing MinUnsat counter available, I developed this tool to compute counts for small variable and clause sizes. After extensive performance optimizations, the tool became fast enough to gather sufficient 2-SAT data points, which allowed me to analyze the underlying patterns and derive a closed-form formula — now **fully proven** for all deficiency values and verified across 30 GPU data points — for the 2-SAT MinUnsat count.
+
+## Two Ways to Count
+
+| Approach | Command | Supports | Speed |
+|----------|---------|----------|-------|
+| **GPU Brute-Force** | `minunsat minunsat` | 2-SAT & 3-SAT | Up to ~19 billion combinations/s (GPU) |
+| **Closed-Form Formula** | `minunsat formula` | 2-SAT only | **Instant** — any $v$ and $c$ |
+
+- **Brute-force mode** exhaustively enumerates all clause combinations on GPU (or CPU) and checks each for minimally unsatisfiable properties. Works for both 2-SAT and 3-SAT, but runtime grows combinatorially.
+- **Formula mode** uses our [closed-form formula](documents/CLOSED_FORM_FORMULA_PROOF_FOR_2SAT_MINUNSAT_DETAILED.md) — fully proven for all deficiency values — to compute the **exact** MIN-UNSAT count for 2-SAT instantly, for arbitrarily large $v$ and $c$.
 
 ## What This Counts
 
@@ -97,20 +107,24 @@ minunsat formula -v 5 -c 6 --details
 # Verify formula against known GPU-computed values
 minunsat formula --verify
 
-# Large-scale computation (computed in ~1-2 seconds!)
-minunsat formula -v 100 -c 150
+# Instant computation for any number of variables and clauses
+minunsat formula -v 20 -c 23
 ```
 
-**Example output for large values:**
+**Example output:**
 ```
 === MIN-UNSAT k-SAT Counter ===
 
 Mode: Closed-Form Formula (2-SAT only)
-Variables (v): 100
-Clauses (c): 150
+Variables (v): 20
+Clauses (c): 23
 
-RESULT: f_all(v=100, k=2, c=150) = 201.351.488.957.534.947.773.288.983.608.563.011.415.511.474.896.510.305.388.382.385.420.667.257.972.473.782.615.376.058.546.021.865.449.371.651.692.870.937.975.565.915.204.882.102.451.385.563.114.583.867.794.038.126.475.060.509.996.548.422.040.331.241.311.223.590.227.003.802.910.720.000.000.000.000.000.000.000
+RESULT: f_all(v=20, k=2, c=23) = 229.932.268.649.941.076.803.584.000.000
 ```
+
+This is an **exact** count — not an approximation. It represents the number of all minimally unsatisfiable 2-SAT formulas that have exactly 20 variables and exactly 23 clauses, where each clause contains exactly 2 literals. Only unique formulas are counted: since a formula is defined as an unordered *set* of clauses, the ordering of clauses does not matter.
+
+The implementation is in [`FormulaCode/MinUnsatClosedFormulaAllVars.cs`](FormulaCode/MinUnsatClosedFormulaAllVars.cs).
 
 **Options:**
 - `-v, --variables` (required): Number of variables
@@ -234,9 +248,9 @@ $$N(c, k, u) = A(d, u) \cdot k! \cdot \binom{c-1}{2d-1+u/2} \cdot 2^{c - B(d,u)}
 
 The coefficients $A(d, j)$ follow Burnside's lemma over the cycle automorphism group, and $B(d, j)$ follows patterns based on whether $d$ is a power of 2. The formula works for **any** d and u — no hardcoded special cases.
 
-The formula is **proven** for prime and power-of-2 diagonals $d$, and **verified** by GPU computation across 30 data points ($v = 2$ through $8$). An open question remains for composite non-power-of-2 $d$ (first at $d = 6$).
+The formula is **fully proven** for all deficiency values $d$ and **verified** by exhaustive GPU computation across 30 data points ($v = 2$ through $8$). The proof covers prime $d$ (necklace counting via Burnside over $\mathbb{Z}_d$), power-of-2 $d$ (binary group $(\mathbb{Z}_2)^m$), and composite non-power-of-2 $d$ (full Burnside over $\mathbb{Z}_d$).
 
-See `CLOSED_FORM_CONJECTURE_2SAT_MINUNSAT_DETAILED.md` in the `documents` folder for the complete analysis and proof status.
+See [`CLOSED_FORM_FORMULA_PROOF_FOR_2SAT_MINUNSAT_DETAILED.md`](documents/CLOSED_FORM_FORMULA_PROOF_FOR_2SAT_MINUNSAT_DETAILED.md) in the `documents` folder for the complete theorem statement, proofs, and verification data.
 
 ## How It Works
 
@@ -289,9 +303,10 @@ MIT License
 |------------------|-------------|
 | `Program.cs` | CLI entry point with `minunsat`, `formula`, and `unsat` subcommands |
 | `Counters/` | GPU and CPU counter implementations (optimized + many-vars fallback) |
-| `Helpers/` | Clause mask builder, combination generator, closed-form formula |
+| `Helpers/` | Clause mask builder, combination generator, literal mapper |
 | `Infrastructure/` | Checkpoint and result types |
-| `documents/` | Mathematical conjecture, derivations, and algorithm documentation |
+| `FormulaCode/` | Closed-form formula implementation (`MinUnsatClosedFormulaAllVars.cs`) |
+| `documents/` | Mathematical proof, derivations, and algorithm documentation |
 
 ## References
 

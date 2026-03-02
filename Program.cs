@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CommandLine;
 using MinUnsatPublish.Counters;
+using MinUnsatPublish.FormulaCode;
 using MinUnsatPublish.Helpers;
 using MinUnsatPublish.Infrastructure;
 

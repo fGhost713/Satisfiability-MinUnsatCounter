@@ -914,7 +914,7 @@ The quotient graph $Q_\phi$ (the undirected multigraph on variables where each c
 
 **Lemma (2-Connectivity for $d \geq 2$).** $Q_\phi$ is 2-connected (has no cut-vertex). *Proof:* Suppose $Q_\phi$ had a cut-vertex $v$ separating components $Q_1, Q_2, \ldots$ If any component's sub-formula is UNSAT, all clauses in other components are non-essential — contradicting MIN-UNSAT. If all components' sub-formulas are SAT, then by the Rerouting Theorem (below), clauses in components with cycles ($d_i \geq 1$) can be rerouted through alternative paths, making at least one clause non-essential — again contradicting MIN-UNSAT. $\square$
 
-**Theorem (Rerouting).** Let $P$ and $P'$ be two internally disjoint paths from $v$ to $c$ in $Q_\phi$. For any clause $C$ on $P$ and any critical path $\pi$ (a directed path $\ell \to^* \neg \ell$ in the implication graph) using $C$, there exists an alternative critical path $\pi'$ that avoids $C$ by rerouting through $P'$.
+**Theorem (Rerouting).** Let $P$ and $P'$ be two internally disjoint paths from $v$ to $c$ in $Q_\phi$. For any clause $C$ on $P$ and any critical path $\pi$ (a directed path $\ell \to^{*} \neg \ell$ in the implication graph) using $C$, there exists an alternative critical path $\pi'$ that avoids $C$ by rerouting through $P'$.
 
 *Proof:* Define the **parity** of a path as $\pi(P) = \sum_{C \in P} \pi(C) \pmod{2}$, where each clause's contribution tracks whether it preserves or flips the literal sign. The fundamental cycle $Z = P \cup P'$ forms a closed loop in $Q_\phi$. Traversing $Z$ completely in the implication graph must return to the starting literal, which forces $\pi(P) = \pi(P')$ — both paths have the same parity. Since both $P$ and $P'$ transform the same input literal to the same output literal (the parity determines this), the segment of $\pi$ through $P$ can be replaced by the corresponding segment through $P'$, yielding $\pi'$. $\square$
 
@@ -963,17 +963,17 @@ For $b = d + j$, we need $u_4 = 0$: **every unbalanced variable has degree exact
 
 *Proof.* Suppose for contradiction that $\phi$ is MIN-UNSAT and contains a degree-4 variable $v$ with a 3-1 polarity split. Let the four incident clauses be $C_1 = (v \vee \ell_a)$, $C_2 = (v \vee \ell_b)$, $C_3 = (v \vee \ell_c)$ (majority polarity) and $C_4 = (\neg v \vee \ell_w)$ (minority polarity, the "bottleneck"). The implication graph has a bottleneck structure: $v$ has in-degree 3, out-degree 1, while $\neg v$ has in-degree 1, out-degree 3.
 
-By hub transitivity (since $\phi$ is UNSAT and $v$ is a contradiction variable), $\neg\ell_x \to^* \ell_y$ for all distinct $x, y \in \{a, b, c, w\}$ via transitive paths through the $v$-hub.
+By hub transitivity (since $\phi$ is UNSAT and $v$ is a contradiction variable), $\neg\ell_x \to^{*} \ell_y$ for all distinct $x, y \in \{a, b, c, w\}$ via transitive paths through the $v$-hub.
 
 Exactly one of four exhaustive cases applies:
 
-**Case 1 (Hub-covered clause exists):** If $\phi$ contains any clause $(\ell_x \vee \ell_y)$ where $x, y \in \{a, b, c, w\}$, both implication edges of that clause ($\neg\ell_x \to \ell_y$ and $\neg\ell_y \to \ell_x$) are transitively covered through the hub. Removing this clause preserves all contradiction cycles (hub paths exist in $\phi \setminus \{C\}$), so the clause is non-essential. $\Rightarrow\!\Leftarrow$ (Contradiction)
+**Case 1 (Hub-covered clause exists):** If $\phi$ contains any clause $(\ell_x \vee \ell_y)$ where $x, y \in \{a, b, c, w\}$, both implication edges of that clause ($\neg\ell_x \to \ell_y$ and $\neg\ell_y \to \ell_x$) are transitively covered through the hub. Removing this clause preserves all contradiction cycles (hub paths exist in $\phi \setminus \{C\}$), so the clause is non-essential. $\Rightarrow\Leftarrow$ (Contradiction)
 
-**Case 2 (Complementary majority pair):** If two majority literals are complementary ($\ell_a = \ell$ and $\ell_b = \neg\ell$), then $\text{var}(\ell)$ is forced to be a contradiction variable: $\neg\ell \to v \to^* \neg v \to \ell$ and $\ell \to v \to \ell_w \to^* \neg\ell_w \to \neg v \to \neg\ell$. Removing $C_1 = (v \vee \ell)$: the path $v \to^* \neg v$ survives (via $C_4$), and $\neg v \to^* v$ survives via $\neg v \to \neg\ell \to^* \ell \to v$ (using $C_2$ edges, not $C_1$). So $C_1$ is non-essential. $\Rightarrow\!\Leftarrow$ (Contradiction)
+**Case 2 (Complementary majority pair):** If two majority literals are complementary ($\ell_a = \ell$ and $\ell_b = \neg\ell$), then $\text{var}(\ell)$ is forced to be a contradiction variable: $\neg\ell \to v \to^{*} \neg v \to \ell$ and $\ell \to v \to \ell_w \to^{*} \neg\ell_w \to \neg v \to \neg\ell$. Removing $C_1 = (v \vee \ell)$: the path $v \to^{*} \neg v$ survives (via $C_4$), and $\neg v \to^{*} v$ survives via $\neg v \to \neg\ell \to^{*} \ell \to v$ (using $C_2$ edges, not $C_1$). So $C_1$ is non-essential. $\Rightarrow\Leftarrow$ (Contradiction)
 
-**Case 3 (Variable overlap with bottleneck):** If $\ell_w$ shares a variable with a majority literal (same literal $\ell_c = \ell_w$ or complementary $\ell_c = \neg\ell_w$), the tight coupling between $C_3$ and $C_4$ provides alternative paths. In subcase $\ell_c = \ell_w$: clauses $(v \vee \ell_w)$ and $(\neg v \vee \ell_w)$ resolve to unit $\ell_w$, and removing a majority clause preserves UNSAT via the path $\neg v \to \ell_w \to^* \neg\ell_w \to v$ (using $C_3$ edges). In subcase $\ell_c = \neg\ell_w$: the tight 2-cycle $\ell_w \leftrightarrow v$ provides rerouting. $\Rightarrow\!\Leftarrow$ (Contradiction)
+**Case 3 (Variable overlap with bottleneck):** If $\ell_w$ shares a variable with a majority literal (same literal $\ell_c = \ell_w$ or complementary $\ell_c = \neg\ell_w$), the tight coupling between $C_3$ and $C_4$ provides alternative paths. In subcase $\ell_c = \ell_w$: clauses $(v \vee \ell_w)$ and $(\neg v \vee \ell_w)$ resolve to unit $\ell_w$, and removing a majority clause preserves UNSAT via the path $\neg v \to \ell_w \to^{*} \neg\ell_w \to v$ (using $C_3$ edges). In subcase $\ell_c = \neg\ell_w$: the tight 2-cycle $\ell_w \leftrightarrow v$ provides rerouting. $\Rightarrow\Leftarrow$ (Contradiction)
 
-**Case 4 (Generic — all distinct, no local connection):** If all four hub literals involve distinct variables, no complementary pairs exist, $\ell_w$ shares no variable with any majority literal, and $\phi$ contains no hub-covered clause, then 2-connectivity of $Q_\phi$ (guaranteed since $d \geq 2$ for degree-4 vertices) provides two internally vertex-disjoint paths between $v$ and $\text{var}(\ell_a)$: the direct edge $C_1$ and an alternative path $P$. By the Rerouting Theorem, $\pi(C_1) = \pi(P)$, so $P$ provides the same literal mapping as $C_1$ in the implication graph. Every critical path using $C_1$ can be rerouted through $P$, so $C_1$ is non-essential. $\Rightarrow\!\Leftarrow$ (Contradiction)
+**Case 4 (Generic — all distinct, no local connection):** If all four hub literals involve distinct variables, no complementary pairs exist, $\ell_w$ shares no variable with any majority literal, and $\phi$ contains no hub-covered clause, then 2-connectivity of $Q_\phi$ (guaranteed since $d \geq 2$ for degree-4 vertices) provides two internally vertex-disjoint paths between $v$ and $\text{var}(\ell_a)$: the direct edge $C_1$ and an alternative path $P$. By the Rerouting Theorem, $\pi(C_1) = \pi(P)$, so $P$ provides the same literal mapping as $C_1$ in the implication graph. Every critical path using $C_1$ can be rerouted through $P$, so $C_1$ is non-essential. $\Rightarrow\Leftarrow$ (Contradiction)
 
 All cases produce a non-essential clause, contradicting MIN-UNSAT. $\square$
 
@@ -2168,12 +2168,12 @@ At a degree-4 vertex $v$ with 3-1 split, the implication graph has:
 
 **Lemma D.3.2 (Hub Transitivity).**  
 In an UNSAT formula $\phi$ with a 3-1 split at $v$, for all $x, y \in \{a, b, c, w\}$ with $x \neq y$:
-$$\neg\ell_x \to^* \ell_y$$
+$$\neg\ell_x \to^{*} \ell_y$$
 
 *Proof.*
 - *Case A:* $x \in \{a, b, c\}$, $y = w$: $\neg\ell_x \to v \to \ell_w$. Direct 2-step path. $\checkmark$
 - *Case B:* $x = w$, $y \in \{a, b, c\}$: $\neg\ell_w \to \neg v \to \ell_y$. Direct 2-step path. $\checkmark$
-- *Case C:* $x, y \in \{a, b, c\}$, $x \neq y$: Since $\phi$ is UNSAT with $v$ a contradiction variable: $v \to^* \neg v$. Path: $\neg\ell_x \to v \to \ell_w \to^* \neg\ell_w \to \neg v \to \ell_y$. $\checkmark$
+- *Case C:* $x, y \in \{a, b, c\}$, $x \neq y$: Since $\phi$ is UNSAT with $v$ a contradiction variable: $v \to^{*} \neg v$. Path: $\neg\ell_x \to v \to \ell_w \to^{*} \neg\ell_w \to \neg v \to \ell_y$. $\checkmark$
 
 $\square$
 
@@ -2212,23 +2212,23 @@ Total: 4 + 2 + 1 + 1 = 8 = $2^3$. All configurations are covered, and no configu
 **Theorem D.4.1 (Hub Coverage Non-Essentiality).**  
 If $\phi$ is UNSAT with a 3-1 split at $v$, and $\phi$ contains a clause $C = (\ell_x \vee \ell_y)$ where $x, y \in \{a, b, c, w\}$ with $x \neq y$, then $C$ is non-essential.
 
-*Proof.* The clause $C$ contributes implication edges $\neg\ell_x \to \ell_y$ and $\neg\ell_y \to \ell_x$. By Lemma D.3.2, both implications are already transitively covered through the hub: $\neg\ell_x \to^* \ell_y$ and $\neg\ell_y \to^* \ell_x$ via $v$-hub paths. Any critical path using an edge of $C$ can be rerouted through the hub (which exists in $\phi \setminus \{C\}$ since hub paths don't use $C$'s edges). Therefore all contradiction cycles are preserved, $\phi \setminus \{C\}$ remains UNSAT, and $C$ is non-essential. $\square$
+*Proof.* The clause $C$ contributes implication edges $\neg\ell_x \to \ell_y$ and $\neg\ell_y \to \ell_x$. By Lemma D.3.2, both implications are already transitively covered through the hub: $\neg\ell_x \to^{*} \ell_y$ and $\neg\ell_y \to^{*} \ell_x$ via $v$-hub paths. Any critical path using an edge of $C$ can be rerouted through the hub (which exists in $\phi \setminus \{C\}$ since hub paths don't use $C$'s edges). Therefore all contradiction cycles are preserved, $\phi \setminus \{C\}$ remains UNSAT, and $C$ is non-essential. $\square$
 
 #### D.5 Case 2: Complementary Majority Pair
 
 **Setup:** $\ell_a = \ell$ and $\ell_b = \neg\ell$ for some literal $\ell$. The incident clauses are $C_1 = (v \vee \ell)$, $C_2 = (v \vee \neg\ell)$, $C_3 = (v \vee \ell_c)$, $C_4 = (\neg v \vee \ell_w)$.
 
 **Lemma D.5.1 (Forced Contradiction Variable).**  
-In Case 2, $\text{var}(\ell)$ is a contradiction variable: $\neg\ell \to v \to^* \neg v \to \ell$ (using $C_1$, $v \to^* \neg v$, $C_1$) and $\ell \to v \to \ell_w \to^* \neg\ell_w \to \neg v \to \neg\ell$ (using $C_2$, $C_4$, $v \to^* \neg v$, $C_2$). $\square$
+In Case 2, $\text{var}(\ell)$ is a contradiction variable: $\neg\ell \to v \to^{*} \neg v \to \ell$ (using $C_1$, $v \to^{*} \neg v$, $C_1$) and $\ell \to v \to \ell_w \to^{*} \neg\ell_w \to \neg v \to \neg\ell$ (using $C_2$, $C_4$, $v \to^{*} \neg v$, $C_2$). $\square$
 
 **Theorem D.5.2 (Case 2 Non-Essentiality).**  
 In Case 2, $C_1 = (v \vee \ell)$ is non-essential.
 
 *Proof.* Let $\phi' = \phi \setminus \{C_1\}$. Edges removed: $\neg v \to \ell$ and $\neg\ell \to v$.
 
-*Path $v \to^* \neg v$ in $\phi'$:* $v \to \ell_w \to^* \neg\ell_w \to \neg v$ (doesn't use $C_1$). $\checkmark$
+*Path $v \to^{*} \neg v$ in $\phi'$:* $v \to \ell_w \to^{*} \neg\ell_w \to \neg v$ (doesn't use $C_1$). $\checkmark$
 
-*Path $\neg v \to^* v$ in $\phi'$:* We use $\neg v \to \neg\ell$ (from $C_2$, retained), then $\neg\ell \to^* \ell$ (exists via the SCC: the path $\ell \to v \to \ell_w \to^* \neg\ell_w \to \neg v \to \neg\ell$ proving $\ell \to^* \neg\ell$ doesn't use $C_1$ — it uses $C_2, C_4$, and other clauses; by SCC transitivity, $\neg\ell \to^* \ell$ through some path not using $C_1$), then $\ell \to v$ (from $C_2$, retained). $\checkmark$
+*Path $\neg v \to^{*} v$ in $\phi'$:* We use $\neg v \to \neg\ell$ (from $C_2$, retained), then $\neg\ell \to^{*} \ell$ (exists via the SCC: the path $\ell \to v \to \ell_w \to^{*} \neg\ell_w \to \neg v \to \neg\ell$ proving $\ell \to^{*} \neg\ell$ doesn't use $C_1$ — it uses $C_2, C_4$, and other clauses; by SCC transitivity, $\neg\ell \to^{*} \ell$ through some path not using $C_1$), then $\ell \to v$ (from $C_2$, retained). $\checkmark$
 
 Therefore $v$ remains a contradiction variable in $\phi'$, so $\phi'$ is UNSAT and $C_1$ is non-essential. $\square$
 
@@ -2238,13 +2238,13 @@ Therefore $v$ remains a contradiction variable in $\phi'$, so $\phi'$ is UNSAT a
 
 **Theorem D.6.1 (Subcase 3a Non-Essentiality).** One of the majority clauses $C_1$ or $C_2$ is non-essential.
 
-*Proof.* After removing $C_1$: path $v \to^* \neg v$: $v \to \ell_w \to^* \neg\ell_w \to \neg v$ (uses $C_4$, not $C_1$). $\checkmark$ Path $\neg v \to^* v$: $\neg v \to \ell_w \to^* \neg\ell_w \to v$ (using $C_3$ edges: $\neg v \to \ell_w$ from $C_3$ and $\neg\ell_w \to v$ from $C_3$, not $C_1$). $\checkmark$ Contradiction structure preserved. $\square$
+*Proof.* After removing $C_1$: path $v \to^{*} \neg v$: $v \to \ell_w \to^{*} \neg\ell_w \to \neg v$ (uses $C_4$, not $C_1$). $\checkmark$ Path $\neg v \to^{*} v$: $\neg v \to \ell_w \to^{*} \neg\ell_w \to v$ (using $C_3$ edges: $\neg v \to \ell_w$ from $C_3$ and $\neg\ell_w \to v$ from $C_3$, not $C_1$). $\checkmark$ Contradiction structure preserved. $\square$
 
 **Subcase 3b:** $\ell_c = \neg\ell_w$ (complementary overlap). Clauses $C_3 = (v \vee \neg\ell_w)$ and $C_4 = (\neg v \vee \ell_w)$ create a tight 2-cycle: $\ell_w \leftrightarrow v$ and $\neg\ell_w \leftrightarrow \neg v$.
 
 **Theorem D.6.2 (Subcase 3b Non-Essentiality).** One of $C_1$, $C_2$, or $C_3$ is non-essential.
 
-*Proof.* By similar reasoning to Subcase 3a, at least one of $\text{var}(\ell_a)$ or $\text{var}(\ell_b)$ is a contradiction variable. After removing $C_1$: $v \to^* \neg v$ via $C_4$/$C_3$ (tight coupling), and $\neg v \to^* v$ via $\neg v \to \neg\ell_w \to^* \ell_w \to v$ (tight coupling). The contradiction structure is preserved. $\square$
+*Proof.* By similar reasoning to Subcase 3a, at least one of $\text{var}(\ell_a)$ or $\text{var}(\ell_b)$ is a contradiction variable. After removing $C_1$: $v \to^{*} \neg v$ via $C_4$/$C_3$ (tight coupling), and $\neg v \to^{*} v$ via $\neg v \to \neg\ell_w \to^{*} \ell_w \to v$ (tight coupling). The contradiction structure is preserved. $\square$
 
 #### D.6b Case 4: Generic (All Distinct, No Local Connection)
 
@@ -2272,10 +2272,10 @@ Let $\phi' = \phi \setminus \{C_1\}$. Every critical path using an edge of $C_1$
 
 **Proof of Theorem D.1.** Suppose for contradiction that $\phi$ is MIN-UNSAT and contains a degree-4 variable $v$ with 3-1 polarity split. By Lemma D.3.3, exactly one of four cases holds:
 
-- **Case 1:** By Theorem D.4.1, $\phi$ contains a non-essential clause. $\Rightarrow\!\Leftarrow$ (Contradiction)
-- **Case 2:** By Theorem D.5.2, $\phi$ contains a non-essential clause. $\Rightarrow\!\Leftarrow$ (Contradiction)
-- **Case 3:** By Theorems D.6.1 and D.6.2, $\phi$ contains a non-essential clause. $\Rightarrow\!\Leftarrow$ (Contradiction)
-- **Case 4:** By Theorem D.6b.2, $\phi$ contains a non-essential clause. $\Rightarrow\!\Leftarrow$ (Contradiction)
+- **Case 1:** By Theorem D.4.1, $\phi$ contains a non-essential clause. $\Rightarrow\Leftarrow$ (Contradiction)
+- **Case 2:** By Theorem D.5.2, $\phi$ contains a non-essential clause. $\Rightarrow\Leftarrow$ (Contradiction)
+- **Case 3:** By Theorems D.6.1 and D.6.2, $\phi$ contains a non-essential clause. $\Rightarrow\Leftarrow$ (Contradiction)
+- **Case 4:** By Theorem D.6b.2, $\phi$ contains a non-essential clause. $\Rightarrow\Leftarrow$ (Contradiction)
 
 In all four cases, we derive a contradiction with $\phi$ being MIN-UNSAT. Therefore, no MIN-UNSAT 2-SAT formula contains a degree-4 variable with a 3-1 polarity split, and every degree-4 variable is balanced. $\square$
 

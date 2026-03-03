@@ -1,4 +1,4 @@
-# Closed-Form Formula: Counting Minimal Unsatisfiable 2-SAT Formulas
+﻿# Closed-Form Formula: Counting Minimal Unsatisfiable 2-SAT Formulas
 
 > **Document Type:** Theorem with detailed proofs, examples, and verification  
 > **Subject:** Closed-form formula for counting minimal unsatisfiable 2-SAT formulas  
@@ -47,9 +47,9 @@
 
 ### What this formula computes
 
-This document presents a closed-form formula that computes the **exact number of minimally unsatisfiable 2-SAT formulas** for any given number of variables $v$ and clauses $c$.
+This document presents a closed-form formula that computes the **exact number of minimally unsatisfiable 2-SAT formulas** for any given number of variables $v$ and clauses $c$. The formula can be evaluated in $O(d^2)$ arithmetic operations, where $d = c - v$ is the deficiency — making it vastly faster than any enumeration-based approach, which must examine exponentially many candidate formulas.
 
-A **2-SAT formula** is a conjunction (AND) of clauses, where each clause contains exactly 2 literals. A literal is either a variable ($x$) or its negation ($\neg x$). Such a formula is **unsatisfiable** (UNSAT) if no truth assignment to the variables can make all clauses true simultaneously. It is **minimally unsatisfiable** (MIN-UNSAT) if it is UNSAT, but removing any single clause makes it satisfiable — in other words, every clause is essential for the contradiction.
+A **2-SAT formula**
 
 Given fixed values of $v$ (number of variables) and $c$ (number of clauses), the formula computes the exact count of all distinct MIN-UNSAT formulas that:
 
@@ -84,7 +84,7 @@ $$f_{\text{all}}(v, v+1) = v! \cdot (v-1) \cdot (v-2) \cdot 2^{v-4}$$
 | 7 | 9 | 2 | 20,321,280 |
 | 8 | 9 | 1 | 27,095,040 |
 
-All values have been verified against exhaustive GPU computation. The formula computes these counts **instantly** — in constant time — for arbitrarily large $v$ and $c$, without enumerating any formulas.
+All values have been verified against exhaustive GPU computation. The formula computes these counts in $O(d^2)$ time (where $d = c - v$), enabling instant evaluation for arbitrarily large $v$ and $c$ without enumerating any formulas.
 
 ### Purpose of this document
 

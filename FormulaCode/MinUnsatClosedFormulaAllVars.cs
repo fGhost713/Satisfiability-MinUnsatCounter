@@ -148,7 +148,7 @@ public static class MinUnsatClosedFormulaAllVars
         else
         {
             // Non-power-of-2: full Burnside over Z_d (handles prime and composite)
-            (long num, long den) = BurnsideCyclicGroup(d, j);
+            (BigInteger num, BigInteger den) = BurnsideCyclicGroup(d, j);
             numA = num;
             denA = den;
         }
@@ -182,14 +182,14 @@ public static class MinUnsatClosedFormulaAllVars
     /// Handles both prime and composite d.
     /// Returns (numerator, denominator) pair.
     /// </summary>
-    private static (long numerator, long denominator) BurnsideCyclicGroup(int d, int j)
+    private static (BigInteger numerator, BigInteger denominator) BurnsideCyclicGroup(int d, int j)
     {
         // Boundary: A(d,0) = A(d,d) = 1/d for all non-pow2 d
         if (j == 0 || j == d)
             return (1, d);
 
         // Sum fixed-point counts over all rotations in Z_d
-        long fixedSum = BinomialLong(d, j); // identity rotation
+        BigInteger fixedSum = BinomialBig(d, j); // identity rotation
 
         for (int r = 1; r < d; r++)
         {
@@ -204,7 +204,7 @@ public static class MinUnsatClosedFormulaAllVars
             if (perCycle > cycles)
                 continue;
 
-            fixedSum += BinomialLong(cycles, perCycle);
+            fixedSum += BinomialBig(cycles, perCycle);
         }
 
         return (fixedSum, d);
@@ -231,21 +231,6 @@ public static class MinUnsatClosedFormulaAllVars
         if (k > n - k) k = n - k;
 
         BigInteger result = 1;
-        for (int i = 0; i < k; i++)
-            result = result * (n - i) / (i + 1);
-        return result;
-    }
-
-    /// <summary>
-    /// Long binomial — used only for Burnside rotation counts where d is small.
-    /// </summary>
-    private static long BinomialLong(int n, int k)
-    {
-        if (k > n || k < 0) return 0;
-        if (k == 0 || k == n) return 1;
-        if (k > n - k) k = n - k;
-
-        long result = 1;
         for (int i = 0; i < k; i++)
             result = result * (n - i) / (i + 1);
         return result;

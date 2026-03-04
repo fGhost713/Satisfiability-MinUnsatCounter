@@ -877,7 +877,7 @@ the number of odd-degree vertices is even. In this setting, odd degree means deg
 
 **Sanity-check table** (nonzero excess can be even; this does not contradict the lemma):
 
-| Formula | Variable | $p^+$ | $p^-$ | $\deg$ | $|e|$ | Parity of $|e|$ |
+| Formula | Variable | $p^+$ | $p^-$ | $\deg$ | $\lvert e \rvert$ | Parity of $\lvert e \rvert$ |
 |:--------|:---------|:-----:|:-----:|:------:|:-----:|:---------------:|
 | $(x \vee y) \wedge (x \vee \neg y) \wedge (\neg x \vee y) \wedge (\neg x \vee \neg y)$ | $x$ | 2 | 2 | 4 | 0 | — (balanced) |
 | $(x \vee y) \wedge (x \vee \neg y) \wedge (x \vee z) \wedge (\neg x \vee z)$ | $x$ | 3 | 1 | 4 | 2 | even |
@@ -3076,7 +3076,7 @@ New edge count: +2 edges, +1 vertex → circuit rank increases by 1
     a --- b
     | \   |  \
     |  f  |    e
-    | /   |   /
+    |   \ |   /
     d --- c -/
 
 Ear P_2: a-f-c (endpoints a,c are in existing graph; vertex f is new)
